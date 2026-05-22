@@ -202,7 +202,8 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
         uint256 agentId = agentRegistry.agentOf(task.claimedBy);
         activeClaims[agentId]--;
 
-        // Refund bounty to poster; claim bond already forfeited at ExecutionVerifier level
+        // Forfeit claim bond to treasury first, then refund bounty to poster
+        bountyEscrow.forfeitBond(taskId);
         bountyEscrow.refundBounty(taskId, task.poster);
         agentRegistry.postFeedback(agentId, false, 0, "");
 
