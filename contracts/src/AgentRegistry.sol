@@ -8,17 +8,14 @@ import "./interfaces/IERC8004Reputation.sol";
 import "./interfaces/IERC8004Validation.sol";
 
 contract AgentRegistry is ERC721URIStorage, ReentrancyGuard, IERC8004Identity, IERC8004Reputation, IERC8004Validation {
-    // ─── Constants ───────────────────────────────────────────────────────────
 
     uint256 public constant MIN_STAKE = 0.01 ether;
     uint256 public constant CLAIM_BOND = 0.0001 ether;
     uint256 public constant STAKE_PER_CLAIM_SLOT = 0.005 ether;
     uint256 public constant INITIAL_REPUTATION = 500;
     uint256 public constant MAX_REPUTATION = 1000;
-    uint256 public constant MISS_SLASH_BPS = 1000; // 10% stake slash on 2nd miss in 24h
+    uint256 public constant MISS_SLASH_BPS = 1000;
     uint256 public constant MISS_WINDOW = 24 hours;
-
-    // ─── Storage ─────────────────────────────────────────────────────────────
 
     struct AgentData {
         address operator;
@@ -41,16 +38,12 @@ contract AgentRegistry is ERC721URIStorage, ReentrancyGuard, IERC8004Identity, I
     address public verifier;
     address public treasury;
 
-    // ─── Errors ──────────────────────────────────────────────────────────────
-
     error InsufficientStake();
     error AlreadyRegistered();
     error NotActive();
     error NotVerifier();
     error AgentNotFound();
     error WithdrawFailed();
-
-    // ─── Modifiers ───────────────────────────────────────────────────────────
 
     modifier onlyVerifier() {
         if (msg.sender != verifier) revert NotVerifier();
@@ -62,21 +55,15 @@ contract AgentRegistry is ERC721URIStorage, ReentrancyGuard, IERC8004Identity, I
         _;
     }
 
-    // ─── Constructor ─────────────────────────────────────────────────────────
-
     constructor(address _treasury) ERC721("Olympus Agent", "OAGT") {
         treasury = _treasury;
     }
 
-    // ─── Admin ───────────────────────────────────────────────────────────────
-
     function setVerifier(address _verifier) external {
-        // Only callable once — verifier is the ExecutionVerifier contract set at deploy
+
         require(verifier == address(0), "Already set");
         verifier = _verifier;
     }
-
-    // ─── ERC-8004 Identity ───────────────────────────────────────────────────
 
     function registerAgent(string calldata metadataURI)
         external
@@ -109,8 +96,6 @@ contract AgentRegistry is ERC721URIStorage, ReentrancyGuard, IERC8004Identity, I
         return operatorToId[operator];
     }
 
-    // ─── Capabilities ────────────────────────────────────────────────────────
-
     function setCapabilities(uint256 agentId, bytes32[] calldata caps) external agentExists(agentId) {
         require(msg.sender == agentData[agentId].operator, "Not operator");
         agentData[agentId].capabilities = caps;
@@ -124,8 +109,6 @@ contract AgentRegistry is ERC721URIStorage, ReentrancyGuard, IERC8004Identity, I
         return false;
     }
 
-    // ─── ERC-8004 Reputation ─────────────────────────────────────────────────
-
     function postFeedback(uint256 agentId, bool success, uint256 latencyMs, bytes calldata)
         external
         onlyVerifier
@@ -133,14 +116,13 @@ contract AgentRegistry is ERC721URIStorage, ReentrancyGuard, IERC8004Identity, I
     {
         AgentData storage agent = agentData[agentId];
 
-        // Weighted moving average: 90% old score, 10% new outcome
         uint256 latencyPenalty = latencyMs > 10_000 ? 500 : (latencyMs * 500) / 10_000;
         uint256 outcomeScore = success ? (MAX_REPUTATION - latencyPenalty) : 0;
         agent.reputationScore = (agent.reputationScore * 90 + outcomeScore * 10) / 100;
 
         if (success) {
             agent.tasksCompleted++;
-            // Reset miss streak on success
+
             agent.missCount = 0;
         } else {
             agent.tasksFailed++;
@@ -159,8 +141,6 @@ contract AgentRegistry is ERC721URIStorage, ReentrancyGuard, IERC8004Identity, I
         return (agent.reputationScore, agent.tasksCompleted + agent.tasksFailed);
     }
 
-    // ─── ERC-8004 Validation ─────────────────────────────────────────────────
-
     function requestValidation(uint256 agentId, bytes32 taskId, bytes calldata proof)
         external
         returns (bytes32 requestId)
@@ -176,13 +156,9 @@ contract AgentRegistry is ERC721URIStorage, ReentrancyGuard, IERC8004Identity, I
         emit ValidationRecorded(requestId, valid);
     }
 
-    // ─── Claim slot accounting ────────────────────────────────────────────────
-
     function maxConcurrentClaims(uint256 agentId) external view returns (uint256) {
         return agentData[agentId].stake / STAKE_PER_CLAIM_SLOT;
     }
-
-    // ─── Stake management ────────────────────────────────────────────────────
 
     function addStake(uint256 agentId) external payable agentExists(agentId) {
         require(msg.sender == agentData[agentId].operator, "Not operator");
@@ -202,23 +178,21 @@ contract AgentRegistry is ERC721URIStorage, ReentrancyGuard, IERC8004Identity, I
         if (!ok) revert WithdrawFailed();
     }
 
-    // ─── Internal ────────────────────────────────────────────────────────────
-
     function _handleMiss(uint256, AgentData storage agent) internal {
         if (agent.missCount == 0 || block.timestamp > agent.firstMissAt + MISS_WINDOW) {
-            // First miss in this window — just record it
+
             agent.missCount = 1;
             agent.firstMissAt = block.timestamp;
         } else {
             agent.missCount++;
             if (agent.missCount == 2) {
-                // Second miss within 24h — slash 10% stake
+
                 uint256 slash = (agent.stake * MISS_SLASH_BPS) / 10_000;
                 agent.stake -= slash;
                 (bool ok,) = treasury.call{value: slash}("");
                 require(ok, "Slash transfer failed");
             } else if (agent.missCount >= 3) {
-                // Third miss — auto-deregister
+
                 agent.active = false;
                 uint256 refund = agent.stake;
                 agent.stake = 0;

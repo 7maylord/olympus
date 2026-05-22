@@ -6,16 +6,9 @@ import "./TaskRegistry.sol";
 import "./AgentRegistry.sol";
 import "./SomniaAgentsAdapter.sol";
 
-/// @notice ERC-8004 Validation Registry hook.
-/// Implements optimistic proof acceptance with a 1-hour dispute window.
-/// Flow: submitProof → verifyAndSettle (records pending) → finalizeExecution (releases bounty)
-///       OR → disputeExecution (within window, re-validates on-chain, slashes if invalid)
 contract ExecutionVerifier is IERC8004Validation {
-    // ─── Constants ───────────────────────────────────────────────────────────
 
     uint256 public constant DISPUTE_WINDOW = 1 hours;
-
-    // ─── Types ───────────────────────────────────────────────────────────────
 
     struct PendingSettlement {
         bytes32 proofTxHash;
@@ -26,22 +19,16 @@ contract ExecutionVerifier is IERC8004Validation {
         bool    disputed;
     }
 
-    // ─── Storage ─────────────────────────────────────────────────────────────
-
     mapping(uint256 taskId => PendingSettlement) public pending;
 
     TaskRegistry          public immutable taskRegistry;
     AgentRegistry         public immutable agentRegistry;
-    SomniaAgentsAdapter   public immutable somniaAdapter; // may be address(0) on local test
-
-    // ─── Events ──────────────────────────────────────────────────────────────
+    SomniaAgentsAdapter   public immutable somniaAdapter;
 
     event ProofPending(uint256 indexed taskId, address indexed agent, bytes32 proofTxHash, uint256 disputeDeadline);
     event ExecutionFinalized(uint256 indexed taskId, address indexed agent);
     event DisputeRaised(uint256 indexed taskId, address indexed challenger);
     event DisputeResolved(uint256 indexed taskId, bool disputeSucceeded);
-
-    // ─── Errors ──────────────────────────────────────────────────────────────
 
     error NotTaskRegistry();
     error NoPendingSettlement();
@@ -51,24 +38,17 @@ contract ExecutionVerifier is IERC8004Validation {
     error NotPoster();
     error TriggerConditionNotMet();
 
-    // ─── Constructor ─────────────────────────────────────────────────────────
-
     constructor(address _taskRegistry, address _agentRegistry, address _somniaAdapter) {
         taskRegistry  = TaskRegistry(_taskRegistry);
         agentRegistry = AgentRegistry(_agentRegistry);
         somniaAdapter = SomniaAgentsAdapter(_somniaAdapter);
     }
 
-    // ─── IExecutionVerifier (called by TaskRegistry.submitProof) ─────────────
-
-    /// @notice Records a pending settlement after validating the trigger condition on-chain.
-    ///         Bounty stays locked in escrow until finalized or disputed.
     function verifyAndSettle(uint256 taskId, bytes32 proofTxHash, address agent) external {
         if (msg.sender != address(taskRegistry)) revert NotTaskRegistry();
 
         TaskRegistry.Task memory task = taskRegistry.getTask(taskId);
 
-        // Re-evaluate trigger condition via Somnia Agents (skipped if no adapter or no condition)
         if (address(somniaAdapter) != address(0) && task.triggerCondition.length > 0) {
             bool triggered = somniaAdapter.evaluate(task.triggerCondition);
             if (!triggered) revert TriggerConditionNotMet();
@@ -91,9 +71,6 @@ contract ExecutionVerifier is IERC8004Validation {
         emit ProofPending(taskId, agent, proofTxHash, disputeDeadline);
     }
 
-    // ─── Finalize (happy path, after dispute window) ──────────────────────────
-
-    /// @notice Anyone can finalize a pending settlement once the dispute window has passed.
     function finalizeExecution(uint256 taskId) external {
         PendingSettlement storage ps = pending[taskId];
         if (ps.submittedAt == 0)              revert NoPendingSettlement();
@@ -109,13 +86,6 @@ contract ExecutionVerifier is IERC8004Validation {
         emit ExecutionFinalized(taskId, ps.agent);
     }
 
-    // ─── Dispute (within dispute window) ─────────────────────────────────────
-
-    /// @notice Task poster can challenge the proof within DISPUTE_WINDOW.
-    ///         Re-evaluates the trigger condition on-chain. If the condition is no longer
-    ///         satisfied (or was never satisfied), the dispute succeeds: bounty is refunded
-    ///         to the poster and the agent is penalized. If the condition still holds,
-    ///         the dispute fails and the proof is confirmed valid.
     function disputeExecution(uint256 taskId) external {
         PendingSettlement storage ps = pending[taskId];
         if (ps.submittedAt == 0)          revert NoPendingSettlement();
@@ -125,7 +95,6 @@ contract ExecutionVerifier is IERC8004Validation {
         TaskRegistry.Task memory task = taskRegistry.getTask(taskId);
         if (msg.sender != task.poster) revert NotPoster();
 
-        // Re-evaluate trigger at current block state
         bool proofValid = _revalidate(task.triggerCondition);
 
         ps.disputed = true;
@@ -133,21 +102,19 @@ contract ExecutionVerifier is IERC8004Validation {
         bytes32 requestId = keccak256(abi.encodePacked(taskId, ps.proofTxHash, ps.agent));
 
         if (!proofValid) {
-            // Dispute succeeded: forfeit bond + refund bounty to poster, penalize agent
+
             taskRegistry.settleDisputed(taskId);
             emit ValidationRecorded(requestId, false);
             emit DisputeRaised(taskId, msg.sender);
             emit DisputeResolved(taskId, true);
         } else {
-            // Dispute failed: proof was valid, finalize in agent's favour immediately
+
             taskRegistry.settleVerified(taskId, ps.proofTxHash, ps.agent, ps.latencyMs);
             emit ValidationRecorded(requestId, true);
             emit DisputeRaised(taskId, msg.sender);
             emit DisputeResolved(taskId, false);
         }
     }
-
-    // ─── IERC8004Validation (pass-through stubs) ──────────────────────────────
 
     function requestValidation(uint256 agentId, bytes32 taskId, bytes calldata proof)
         external
@@ -160,8 +127,6 @@ contract ExecutionVerifier is IERC8004Validation {
     function recordValidation(bytes32 requestId, bool valid, bytes calldata) external {
         emit ValidationRecorded(requestId, valid);
     }
-
-    // ─── Views ───────────────────────────────────────────────────────────────
 
     function isDisputable(uint256 taskId) external view returns (bool) {
         PendingSettlement storage ps = pending[taskId];
@@ -179,9 +144,6 @@ contract ExecutionVerifier is IERC8004Validation {
             && block.timestamp >= ps.submittedAt + DISPUTE_WINDOW;
     }
 
-    // ─── Internal ────────────────────────────────────────────────────────────
-
-    // Reverts with OracleResultStale if cache is stale — poster must refresh oracle first.
     function _revalidate(bytes memory triggerCondition) internal view returns (bool) {
         if (address(somniaAdapter) == address(0) || triggerCondition.length == 0) {
             return true;

@@ -8,29 +8,13 @@ import "../src/TaskRegistry.sol";
 import "../src/SomniaAgentsAdapter.sol";
 import "../src/ExecutionVerifier.sol";
 
-/// @notice Deploys all Olympus contracts in dependency order and wires them together.
-///
-/// Required env vars:
-///   SOMNIA_RPC_URL          — Somnia testnet RPC
-///   DEPLOYER_PRIVATE_KEY    — deployer key (never commit)
-///   TREASURY_ADDRESS        — address that receives listing fees + forfeited bonds
-///   SOMNIA_AGENTS_ADDRESS   — address of Somnia's native ISomniaAgents precompile
-///   PRICE_FEED_BASE_URL     — base URL for price oracle API (e.g. https://api.price-feed.xyz/v1/)
-///
-/// Usage:
-///   forge script script/Deploy.s.sol \
-///     --rpc-url $SOMNIA_RPC_URL \
-///     --broadcast \
-///     --verify
 contract Deploy is Script {
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployer    = vm.addr(deployerKey);
 
-        // Treasury defaults to deployer on testnet; override with TREASURY_ADDRESS in prod
         address treasury = vm.envOr("TREASURY_ADDRESS", deployer);
 
-        // Somnia's native on-chain compute precompile — stub address for testnet until confirmed
         address somniaAgents = vm.envOr("SOMNIA_AGENTS_ADDRESS", address(0));
 
         string memory priceBase = vm.envOr(
@@ -46,19 +30,15 @@ contract Deploy is Script {
 
         vm.startBroadcast(deployerKey);
 
-        // ── 1. AgentRegistry ─────────────────────────────────────────────────
         AgentRegistry agentRegistry = new AgentRegistry(treasury);
         console2.log("AgentRegistry        :", address(agentRegistry));
 
-        // ── 2. BountyEscrow ──────────────────────────────────────────────────
         BountyEscrow bountyEscrow = new BountyEscrow(treasury);
         console2.log("BountyEscrow         :", address(bountyEscrow));
 
-        // ── 3. SomniaAgentsAdapter ────────────────────────────────────────────
         SomniaAgentsAdapter somniaAdapter = new SomniaAgentsAdapter(somniaAgents, priceBase);
         console2.log("SomniaAgentsAdapter  :", address(somniaAdapter));
 
-        // ── 4. TaskRegistry ───────────────────────────────────────────────────
         TaskRegistry taskRegistry = new TaskRegistry(
             address(agentRegistry),
             address(bountyEscrow),
@@ -66,7 +46,6 @@ contract Deploy is Script {
         );
         console2.log("TaskRegistry         :", address(taskRegistry));
 
-        // ── 5. ExecutionVerifier ──────────────────────────────────────────────
         ExecutionVerifier executionVerifier = new ExecutionVerifier(
             address(taskRegistry),
             address(agentRegistry),
@@ -74,19 +53,14 @@ contract Deploy is Script {
         );
         console2.log("ExecutionVerifier    :", address(executionVerifier));
 
-        // ── 6. Wire contracts ─────────────────────────────────────────────────
-        // AgentRegistry: only TaskRegistry can call postFeedback
         agentRegistry.setVerifier(address(taskRegistry));
 
-        // BountyEscrow: only TaskRegistry can move funds
         bountyEscrow.setTaskRegistry(address(taskRegistry));
 
-        // TaskRegistry: delegate proof verification to ExecutionVerifier
         taskRegistry.setExecutionVerifier(address(executionVerifier));
 
         vm.stopBroadcast();
 
-        // ── 7. Verify wiring ──────────────────────────────────────────────────
         require(agentRegistry.verifier()           == address(taskRegistry),       "AgentRegistry wiring");
         require(bountyEscrow.taskRegistry()        == address(taskRegistry),       "BountyEscrow wiring");
         require(taskRegistry.executionVerifier()   == address(executionVerifier),  "TaskRegistry wiring");

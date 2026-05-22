@@ -5,29 +5,25 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./AgentRegistry.sol";
 import "./BountyEscrow.sol";
 
-/// @notice Minimal interface exposed to ExecutionVerifier so it can settle verified tasks.
 interface ITaskSettlement {
     function settleVerified(uint256 taskId, bytes32 proofTxHash, address agent, uint256 latencyMs) external;
     function settleDisputed(uint256 taskId) external;
 }
 
 contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
-    // ─── Constants ───────────────────────────────────────────────────────────
 
     uint256 public constant MIN_BOUNTY           = 0.001 ether;
     uint256 public constant LISTING_FEE          = 0.0001 ether;
     uint256 public constant CLAIM_BOND           = 0.0001 ether;
-    uint256 public constant DEFAULT_CLAIM_WINDOW = 60; // seconds
-
-    // ─── Types ───────────────────────────────────────────────────────────────
+    uint256 public constant DEFAULT_CLAIM_WINDOW = 60;
 
     enum TaskStatus { Open, Claimed, Executed, Expired, Disputed }
 
     struct Task {
         address poster;
         bytes32 capabilityTag;
-        bytes   triggerCondition; // ABI-encoded (triggerType, params)
-        bytes   targetAction;     // ABI-encoded (actionType, params)
+        bytes   triggerCondition;
+        bytes   targetAction;
         uint256 bounty;
         uint256 expiry;
         uint256 minAgentReputation;
@@ -37,8 +33,6 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
         uint256 claimWindowSeconds;
     }
 
-    // ─── Storage ─────────────────────────────────────────────────────────────
-
     mapping(uint256 => Task) private _tasks;
     mapping(uint256 agentId => uint256 count) public activeClaims;
 
@@ -46,18 +40,14 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
 
     AgentRegistry public immutable agentRegistry;
     BountyEscrow  public immutable bountyEscrow;
-    address       public executionVerifier; // set once after deploy
+    address       public executionVerifier;
     address       public immutable treasury;
-
-    // ─── Events ──────────────────────────────────────────────────────────────
 
     event TaskPosted(uint256 indexed taskId, bytes32 indexed capabilityTag, uint256 bounty, uint256 expiry);
     event TaskClaimed(uint256 indexed taskId, address indexed agent, uint256 claimBond);
     event TaskExecuted(uint256 indexed taskId, address indexed agent, bytes32 proofHash, uint256 latencyMs);
     event TaskExpired(uint256 indexed taskId, bool bondForfeited);
     event TaskDisputed(uint256 indexed taskId, address indexed challenger);
-
-    // ─── Errors ──────────────────────────────────────────────────────────────
 
     error TaskNotFound();
     error TaskNotOpen();
@@ -75,14 +65,10 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
     error CannotExpire();
     error ClaimWindowActive();
 
-    // ─── Modifier ────────────────────────────────────────────────────────────
-
     modifier onlyExecutionVerifier() {
         if (msg.sender != executionVerifier) revert NotExecutionVerifier();
         _;
     }
-
-    // ─── Constructor ─────────────────────────────────────────────────────────
 
     constructor(address _agentRegistry, address _bountyEscrow, address _treasury) {
         agentRegistry = AgentRegistry(_agentRegistry);
@@ -90,14 +76,10 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
         treasury      = _treasury;
     }
 
-    // ─── Admin ───────────────────────────────────────────────────────────────
-
     function setExecutionVerifier(address _verifier) external {
         require(executionVerifier == address(0), "Already set");
         executionVerifier = _verifier;
     }
-
-    // ─── Post ────────────────────────────────────────────────────────────────
 
     function postTask(
         bytes32 capabilityTag,
@@ -128,15 +110,12 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
             claimWindowSeconds: window
         });
 
-        // Listing fee to treasury, bounty into escrow
         (bool ok,) = treasury.call{value: LISTING_FEE}("");
         require(ok, "Fee transfer failed");
         bountyEscrow.depositBounty{value: bounty}(taskId);
 
         emit TaskPosted(taskId, capabilityTag, bounty, expiry);
     }
-
-    // ─── Claim ───────────────────────────────────────────────────────────────
 
     function claimTask(uint256 taskId) external payable nonReentrant {
         Task storage task = _tasks[taskId];
@@ -155,7 +134,6 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
             revert ClaimLimitReached();
         }
 
-        // Checks-effects-interactions
         task.status    = TaskStatus.Claimed;
         task.claimedBy = msg.sender;
         task.claimedAt = block.timestamp;
@@ -166,8 +144,6 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
         emit TaskClaimed(taskId, msg.sender, msg.value);
     }
 
-    // ─── Submit proof (optimistic path — full path via ExecutionVerifier) ─────
-
     function submitProof(uint256 taskId, bytes32 proofTxHash) external nonReentrant {
         Task storage task = _tasks[taskId];
         if (task.status != TaskStatus.Claimed)                              revert TaskNotClaimed();
@@ -175,17 +151,14 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
         if (block.timestamp > task.claimedAt + task.claimWindowSeconds)     revert ClaimWindowExpired();
 
         if (executionVerifier != address(0)) {
-            // Delegate to ExecutionVerifier; it will call settleVerified back
-            // (ExecutionVerifier drives the settlement in the full path)
+
             IExecutionVerifier(executionVerifier).verifyAndSettle(taskId, proofTxHash, msg.sender);
         } else {
-            // Optimistic path (no verifier wired yet)
+
             uint256 latencyMs = (block.timestamp - task.claimedAt) * 1000;
             _settleSuccess(taskId, proofTxHash, msg.sender, latencyMs);
         }
     }
-
-    // ─── ITaskSettlement callbacks (called by ExecutionVerifier) ─────────────
 
     function settleVerified(uint256 taskId, bytes32 proofTxHash, address agent, uint256 latencyMs)
         external
@@ -202,7 +175,6 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
         uint256 agentId = agentRegistry.agentOf(task.claimedBy);
         activeClaims[agentId]--;
 
-        // Forfeit claim bond to treasury first, then refund bounty to poster
         bountyEscrow.forfeitBond(taskId);
         bountyEscrow.refundBounty(taskId, task.poster);
         agentRegistry.postFeedback(agentId, false, 0, "");
@@ -210,21 +182,18 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
         emit TaskDisputed(taskId, task.poster);
     }
 
-    // ─── Expire ──────────────────────────────────────────────────────────────
-
     function expireTask(uint256 taskId) external nonReentrant {
         Task storage task = _tasks[taskId];
         if (task.poster == address(0)) revert TaskNotFound();
 
         if (task.status == TaskStatus.Claimed) {
-            // Claim window must have lapsed
+
             if (block.timestamp <= task.claimedAt + task.claimWindowSeconds) revert ClaimWindowActive();
 
             uint256 agentId = agentRegistry.agentOf(task.claimedBy);
             activeClaims[agentId]--;
             agentRegistry.postFeedback(agentId, false, 0, "");
 
-            // Reset to Open so another agent can claim
             task.status    = TaskStatus.Open;
             task.claimedBy = address(0);
             task.claimedAt = 0;
@@ -244,8 +213,6 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
         }
     }
 
-    // ─── Views ───────────────────────────────────────────────────────────────
-
     function getTask(uint256 taskId) external view returns (Task memory) {
         if (_tasks[taskId].poster == address(0)) revert TaskNotFound();
         return _tasks[taskId];
@@ -254,8 +221,6 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
     function taskCount() external view returns (uint256) {
         return _taskIdCounter;
     }
-
-    // ─── Internal ────────────────────────────────────────────────────────────
 
     function _settleSuccess(uint256 taskId, bytes32 proofTxHash, address agent, uint256 latencyMs) internal {
         Task storage task = _tasks[taskId];
@@ -271,7 +236,6 @@ contract TaskRegistry is ReentrancyGuard, ITaskSettlement {
     }
 }
 
-/// @dev Minimal interface so TaskRegistry can call the verifier without a circular import.
 interface IExecutionVerifier {
     function verifyAndSettle(uint256 taskId, bytes32 proofTxHash, address agent) external;
 }
