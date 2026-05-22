@@ -8,14 +8,20 @@ import "../src/AgentRegistry.sol";
 import "../src/BountyEscrow.sol";
 import "../src/SomniaAgentsAdapter.sol";
 
-/// @dev Minimal mock for ISomniaAgents — returns a pre-set triggered value.
+/// @dev Minimal mock for ISomniaAgents — calls onAgentResponse synchronously within createTask.
+///      Returns price 1_000e18 (< 2_000e18 threshold → triggered) or 3_000e18 (not triggered).
 contract MockSomniaAgents {
     bool public response;
+    SomniaAgentsAdapter public adapter;
+    uint256 public nextId;
+
     function setResponse(bool val) external { response = val; }
-    function queryAPI(string calldata, string calldata) external view returns (bytes memory) {
-        // Return abi.encoded uint256 representing 1 (triggered) or 0 (not triggered)
-        // The adapter decodes as price — set a value that satisfies the condition
-        return abi.encode(response ? uint256(1_000e18) : uint256(3_000e18));
+    function setAdapter(address a)  external { adapter = SomniaAgentsAdapter(a); }
+
+    function createTask(uint256, bytes calldata taskData) external payable returns (uint256 id) {
+        id = ++nextId;
+        bytes memory result = abi.encode(response ? uint256(1_000e18) : uint256(3_000e18));
+        adapter.onAgentResponse(id, taskData, result);
     }
 }
 
@@ -65,6 +71,7 @@ contract ExecutionVerifierTest is Test {
         agentReg.setVerifier(address(taskReg));
         escrow.setTaskRegistry(address(taskReg));
         taskReg.setExecutionVerifier(address(verifier));
+        mockSomnia.setAdapter(address(adapter));
 
         vm.deal(poster, 100 ether);
         vm.deal(alice,  10 ether);
@@ -96,8 +103,14 @@ contract ExecutionVerifierTest is Test {
     }
 
     function _priceTrigger(bool triggerBelow) internal view returns (bytes memory) {
-        // Use address(1) as a dummy token address; mock ignores the URL
         return adapter.encodePriceTrigger(address(1), 2_000e18, triggerBelow);
+    }
+
+    /// Prime the oracle cache so evaluate() doesn't revert with OracleResultStale.
+    /// Call this (with mockSomnia.setResponse already set) before any submitProof or disputeExecution
+    /// that involves a trigger condition.
+    function _primeOracle(bool triggerBelow) internal {
+        adapter.requestOracleUpdate(_priceTrigger(triggerBelow));
     }
 
     // ─── verifyAndSettle ─────────────────────────────────────────────────────
@@ -137,6 +150,7 @@ contract ExecutionVerifierTest is Test {
     function test_verify_with_trigger_condition_passes_when_met() public {
         mockSomnia.setResponse(true); // price = 1_000e18 < 2_000e18 → triggered
         uint256 taskId = _postAndClaimWithTrigger(_priceTrigger(true));
+        _primeOracle(true);
 
         vm.prank(alice);
         taskReg.submitProof(taskId, PROOF_HASH); // should not revert
@@ -148,6 +162,7 @@ contract ExecutionVerifierTest is Test {
     function test_verify_reverts_when_trigger_not_met() public {
         mockSomnia.setResponse(false); // price = 3_000e18 > 2_000e18 → NOT triggered (below)
         uint256 taskId = _postAndClaimWithTrigger(_priceTrigger(true));
+        _primeOracle(true); // primes cache with not-triggered result
 
         vm.prank(alice);
         vm.expectRevert(ExecutionVerifier.TriggerConditionNotMet.selector);
@@ -237,14 +252,15 @@ contract ExecutionVerifierTest is Test {
     // ─── disputeExecution ─────────────────────────────────────────────────────
 
     function test_dispute_success_refunds_poster() public {
-        // Trigger was "met" when proof submitted
         mockSomnia.setResponse(true);
         uint256 taskId = _postAndClaimWithTrigger(_priceTrigger(true));
+        _primeOracle(true); // cache: triggered
         vm.prank(alice);
         taskReg.submitProof(taskId, PROOF_HASH);
 
-        // Now trigger is NOT met (price recovered) → dispute succeeds
+        // Price recovered — update cache to not-triggered before disputing
         mockSomnia.setResponse(false);
+        _primeOracle(true);
         uint256 posterBefore = poster.balance;
 
         vm.prank(poster);
@@ -258,10 +274,12 @@ contract ExecutionVerifierTest is Test {
     function test_dispute_success_forfeits_bond_to_treasury() public {
         mockSomnia.setResponse(true);
         uint256 taskId = _postAndClaimWithTrigger(_priceTrigger(true));
+        _primeOracle(true);
         vm.prank(alice);
         taskReg.submitProof(taskId, PROOF_HASH);
 
         mockSomnia.setResponse(false);
+        _primeOracle(true);
         uint256 treasuryBefore = treasury.balance;
 
         vm.prank(poster);
@@ -273,10 +291,12 @@ contract ExecutionVerifierTest is Test {
     function test_dispute_success_emits_events() public {
         mockSomnia.setResponse(true);
         uint256 taskId = _postAndClaimWithTrigger(_priceTrigger(true));
+        _primeOracle(true);
         vm.prank(alice);
         taskReg.submitProof(taskId, PROOF_HASH);
 
         mockSomnia.setResponse(false);
+        _primeOracle(true);
 
         vm.expectEmit(true, true, false, false);
         emit DisputeRaised(taskId, poster);
@@ -291,6 +311,7 @@ contract ExecutionVerifierTest is Test {
         // Trigger still met → dispute fails → agent gets paid immediately
         mockSomnia.setResponse(true);
         uint256 taskId  = _postAndClaimWithTrigger(_priceTrigger(true));
+        _primeOracle(true);
         uint256 aliceBefore = alice.balance;
         vm.prank(alice);
         taskReg.submitProof(taskId, PROOF_HASH);
@@ -306,6 +327,7 @@ contract ExecutionVerifierTest is Test {
     function test_dispute_fail_emits_resolved_false() public {
         mockSomnia.setResponse(true);
         uint256 taskId = _postAndClaimWithTrigger(_priceTrigger(true));
+        _primeOracle(true);
         vm.prank(alice);
         taskReg.submitProof(taskId, PROOF_HASH);
 

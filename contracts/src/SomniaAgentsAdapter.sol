@@ -1,188 +1,203 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @notice Somnia's native on-chain AI compute interface.
-/// Contracts can query external APIs and run deterministic models inside transactions.
+/// @notice Somnia's native on-chain AI compute interface (async task pattern).
+/// Contracts call createTask(); Somnia's executor fetches data off-chain, then
+/// calls back via onAgentResponse() in a separate transaction.
 interface ISomniaAgents {
-    function queryAPI(string calldata url, string calldata jsonPath) external returns (bytes memory result);
+    function createTask(uint256 agentId, bytes calldata taskData)
+        external payable returns (uint256 taskId);
 }
 
-/// @notice Trigger-condition evaluator that calls Somnia Agents inside transactions,
-/// eliminating off-chain price monitors and oracles entirely.
+/// @notice Trigger-condition evaluator backed by Somnia Agents' async oracle.
+///
+/// Flow:
+///   1. Call requestOracleUpdate(trigger) — queues a Somnia compute task.
+///   2. Somnia's executor fetches data and calls onAgentResponse(taskId, result).
+///   3. evaluate(trigger) reads the cached result (reverts with OracleResultStale if expired).
+///
+/// BlockInterval triggers are pure (block.number only) — no oracle call needed.
+/// When somniaAgents == address(0), API triggers are cached as triggered=true (optimistic).
 contract SomniaAgentsAdapter {
     // ─── Types ───────────────────────────────────────────────────────────────
 
     enum TriggerType {
-        PriceBelow,    // token spot price drops under threshold
-        PriceAbove,    // token spot price rises above threshold
-        HealthFactor,  // lending position health factor drops below threshold
-        APYSpread,     // yield spread between two pools exceeds threshold
-        BlockInterval  // N blocks have elapsed since anchor block
+        PriceBelow,
+        PriceAbove,
+        HealthFactor,
+        APYSpread,
+        BlockInterval
     }
 
     struct TriggerCondition {
         TriggerType triggerType;
-        bytes       params;          // ABI-encoded per TriggerType (see evaluate*)
+        bytes       params;
     }
+
+    struct CachedResult {
+        bool    triggered;
+        uint256 cachedAt;  // block.number when result was stored
+    }
+
+    // ─── Constants ───────────────────────────────────────────────────────────
+
+    // 150 blocks ≈ 60 seconds at Somnia's 400ms block time — matches the default claim window.
+    uint256 public constant CACHE_VALID_BLOCKS = 150;
 
     // ─── Storage ─────────────────────────────────────────────────────────────
 
     ISomniaAgents public immutable somniaAgents;
+    string        public priceFeedBase;
+    address       public immutable owner;
+    uint256       public oracleAgentId;
 
-    // Base URL for price feed API — configurable so testnet can point elsewhere
-    string public priceFeedBase;
+    mapping(bytes32 => CachedResult) internal _cache;  // keccak256(trigger) => result
 
     // ─── Errors ──────────────────────────────────────────────────────────────
 
+    error OracleResultStale();
+    error NotSomniaAgents();
+    error Unauthorized();
     error UnsupportedTriggerType();
     error InvalidParams();
-    error PriceFeedFailed();
-    error HealthFactorFailed();
-    error APYFetchFailed();
+
+    // ─── Events ──────────────────────────────────────────────────────────────
+
+    event OracleUpdateRequested(bytes32 indexed triggerHash, uint256 somniaTaskId);
+    event OracleResultCached(bytes32 indexed triggerHash, bool triggered);
 
     // ─── Constructor ─────────────────────────────────────────────────────────
 
     constructor(address _somniaAgents, string memory _priceFeedBase) {
-        somniaAgents  = ISomniaAgents(_somniaAgents);
+        owner        = msg.sender;
+        somniaAgents = ISomniaAgents(_somniaAgents);
         priceFeedBase = _priceFeedBase;
     }
 
-    // ─── Primary entry point ─────────────────────────────────────────────────
+    // ─── Admin ───────────────────────────────────────────────────────────────
 
-    /// @notice Evaluate any trigger condition. Called inside a transaction by ExecutionVerifier
-    ///         or directly by agents polling on-chain before executing.
-    /// @param encoded ABI-encoded TriggerCondition struct
-    /// @return triggered True if the condition is currently satisfied
-    function evaluate(bytes calldata encoded) external returns (bool triggered) {
-        TriggerCondition memory cond = abi.decode(encoded, (TriggerCondition));
+    function setOracleAgentId(uint256 id) external {
+        if (msg.sender != owner) revert Unauthorized();
+        oracleAgentId = id;
+    }
 
-        if (cond.triggerType == TriggerType.PriceBelow || cond.triggerType == TriggerType.PriceAbove) {
-            return _evaluatePrice(cond);
-        } else if (cond.triggerType == TriggerType.HealthFactor) {
-            return _evaluateHealthFactor(cond);
-        } else if (cond.triggerType == TriggerType.APYSpread) {
-            return _evaluateAPYSpread(cond);
-        } else if (cond.triggerType == TriggerType.BlockInterval) {
-            return _evaluateBlockInterval(cond);
-        } else {
-            revert UnsupportedTriggerType();
+    // ─── Request oracle update ────────────────────────────────────────────────
+
+    /// @notice Queue an oracle update for the given encoded TriggerCondition.
+    ///         BlockInterval: resolved inline (pure), result cached immediately.
+    ///         API triggers: calls Somnia Agents, result cached on callback.
+    ///         somniaAgents == address(0): cached as triggered=true (optimistic).
+    /// @return somniaTaskId  Somnia task ID; 0 for pure/optimistic paths.
+    function requestOracleUpdate(bytes calldata trigger) external returns (uint256 somniaTaskId) {
+        TriggerCondition memory cond = abi.decode(trigger, (TriggerCondition));
+        bytes32 h = keccak256(trigger);
+
+        if (cond.triggerType == TriggerType.BlockInterval) {
+            (, uint256 interval) = abi.decode(cond.params, (uint256, uint256));
+            if (interval == 0) revert InvalidParams();
+            bool result = _evaluateBlockInterval(cond);
+            _cache[h] = CachedResult(result, block.number);
+            emit OracleResultCached(h, result);
+            return 0;
         }
+
+        // Validate params before sending to oracle
+        if (cond.triggerType == TriggerType.PriceBelow || cond.triggerType == TriggerType.PriceAbove) {
+            (address token,) = abi.decode(cond.params, (address, uint256));
+            if (token == address(0)) revert InvalidParams();
+        } else if (cond.triggerType == TriggerType.HealthFactor) {
+            (address protocol, address user,) = abi.decode(cond.params, (address, address, uint256));
+            if (protocol == address(0) || user == address(0)) revert InvalidParams();
+        }
+
+        if (address(somniaAgents) == address(0)) {
+            _cache[h] = CachedResult(true, block.number);
+            emit OracleResultCached(h, true);
+            return 0;
+        }
+
+        // taskData encodes both the trigger and priceFeedBase so Somnia passes it back in the callback.
+        bytes memory taskData = abi.encode(trigger, priceFeedBase);
+        somniaTaskId = somniaAgents.createTask(oracleAgentId, taskData);
+        emit OracleUpdateRequested(h, somniaTaskId);
     }
 
-    // ─── Price trigger ───────────────────────────────────────────────────────
+    // ─── Somnia callback ──────────────────────────────────────────────────────
 
-    /// Params: (address token, uint256 thresholdUSD_18dec)
-    function _evaluatePrice(TriggerCondition memory cond) internal returns (bool) {
-        (address token, uint256 thresholdUSD) = abi.decode(cond.params, (address, uint256));
-        if (token == address(0)) revert InvalidParams();
+    /// @notice Called by Somnia's executor once the compute task completes.
+    ///         Only callable by address(somniaAgents).
+    /// @param originalTaskData  The taskData bytes originally passed to createTask —
+    ///                          Somnia echoes these back so we can recover the trigger without storage.
+    function onAgentResponse(uint256, bytes calldata originalTaskData, bytes calldata result) external {
+        if (msg.sender != address(somniaAgents)) revert NotSomniaAgents();
 
-        bytes memory raw = somniaAgents.queryAPI(
-            string(abi.encodePacked(priceFeedBase, _toHexString(token))),
-            "$.price_usd"
-        );
-        if (raw.length == 0) revert PriceFeedFailed();
-
-        uint256 currentPrice = abi.decode(raw, (uint256));
-
-        return cond.triggerType == TriggerType.PriceBelow
-            ? currentPrice < thresholdUSD
-            : currentPrice > thresholdUSD;
+        (bytes memory trigger,) = abi.decode(originalTaskData, (bytes, string));
+        TriggerCondition memory cond = abi.decode(trigger, (TriggerCondition));
+        bool triggered = _evaluateFromResult(cond, result);
+        bytes32 h = keccak256(trigger);
+        _cache[h] = CachedResult(triggered, block.number);
+        emit OracleResultCached(h, triggered);
     }
 
-    /// @notice Convenience wrapper used by ExecutionVerifier for the conditional-swap task type.
-    function evaluatePriceTrigger(address token, uint256 thresholdUSD, bool triggerBelow)
-        external
-        returns (bool triggered)
-    {
-        bytes memory raw = somniaAgents.queryAPI(
-            string(abi.encodePacked(priceFeedBase, _toHexString(token))),
-            "$.price_usd"
-        );
-        if (raw.length == 0) revert PriceFeedFailed();
-        uint256 currentPrice = abi.decode(raw, (uint256));
-        triggered = triggerBelow ? currentPrice < thresholdUSD : currentPrice > thresholdUSD;
+    // ─── Evaluate (reads cache) ───────────────────────────────────────────────
+
+    /// @notice Returns whether a trigger condition is currently satisfied.
+    ///         BlockInterval: evaluated inline (always fresh).
+    ///         Others: reads cache; reverts with OracleResultStale if expired or absent.
+    function evaluate(bytes calldata trigger) external view returns (bool) {
+        TriggerCondition memory cond = abi.decode(trigger, (TriggerCondition));
+
+        if (cond.triggerType == TriggerType.BlockInterval) {
+            return _evaluateBlockInterval(cond);
+        }
+
+        CachedResult memory cached = _cache[keccak256(trigger)];
+        if (cached.cachedAt == 0 || block.number - cached.cachedAt > CACHE_VALID_BLOCKS) {
+            revert OracleResultStale();
+        }
+        return cached.triggered;
     }
 
-    // ─── Health factor trigger ────────────────────────────────────────────────
+    // ─── Internal ────────────────────────────────────────────────────────────
 
-    /// Params: (address lendingProtocol, address user, uint256 minHealthFactor_18dec)
-    function _evaluateHealthFactor(TriggerCondition memory cond) internal returns (bool) {
-        (address protocol, address user, uint256 minHF) = abi.decode(cond.params, (address, address, uint256));
-        if (protocol == address(0) || user == address(0)) revert InvalidParams();
-
-        bytes memory raw = somniaAgents.queryAPI(
-            string(abi.encodePacked(
-                "https://api.lending-protocol.xyz/v1/health/",
-                _toHexString(protocol),
-                "/",
-                _toHexString(user)
-            )),
-            "$.health_factor"
-        );
-        if (raw.length == 0) revert HealthFactorFailed();
-
-        uint256 healthFactor = abi.decode(raw, (uint256));
-        return healthFactor < minHF;
-    }
-
-    /// @notice Convenience wrapper used by ExecutionVerifier for the collateral-guard task type.
-    function evaluateHealthFactor(address lendingProtocol, address user)
-        external
-        returns (bool triggered, uint256 healthFactor)
-    {
-        bytes memory raw = somniaAgents.queryAPI(
-            string(abi.encodePacked(
-                "https://api.lending-protocol.xyz/v1/health/",
-                _toHexString(lendingProtocol),
-                "/",
-                _toHexString(user)
-            )),
-            "$.health_factor"
-        );
-        if (raw.length == 0) revert HealthFactorFailed();
-        healthFactor = abi.decode(raw, (uint256));
-        triggered = healthFactor < 1.3e18; // default threshold; callers should use evaluate() for custom values
-    }
-
-    // ─── APY spread trigger ───────────────────────────────────────────────────
-
-    /// Params: (string poolA_id, string poolB_id, uint256 minSpreadBPS)
-    function _evaluateAPYSpread(TriggerCondition memory cond) internal returns (bool) {
-        (string memory poolA, string memory poolB, uint256 minSpreadBPS) =
-            abi.decode(cond.params, (string, string, uint256));
-
-        bytes memory rawA = somniaAgents.queryAPI(
-            string(abi.encodePacked("https://api.defi-yields.xyz/v1/pool/", poolA)),
-            "$.apy_bps"
-        );
-        bytes memory rawB = somniaAgents.queryAPI(
-            string(abi.encodePacked("https://api.defi-yields.xyz/v1/pool/", poolB)),
-            "$.apy_bps"
-        );
-        if (rawA.length == 0 || rawB.length == 0) revert APYFetchFailed();
-
-        uint256 apyA = abi.decode(rawA, (uint256));
-        uint256 apyB = abi.decode(rawB, (uint256));
-        uint256 spread = apyA > apyB ? apyA - apyB : apyB - apyA;
-        return spread >= minSpreadBPS;
-    }
-
-    // ─── Block interval trigger ───────────────────────────────────────────────
-
-    /// Params: (uint256 anchorBlock, uint256 intervalBlocks)
-    /// Pure — no API call needed; uses block.number directly.
     function _evaluateBlockInterval(TriggerCondition memory cond) internal view returns (bool) {
         (uint256 anchorBlock, uint256 intervalBlocks) = abi.decode(cond.params, (uint256, uint256));
         if (intervalBlocks == 0) revert InvalidParams();
         return (block.number - anchorBlock) % intervalBlocks == 0 && block.number > anchorBlock;
     }
 
-    // ─── Encoding helpers (for off-chain SDK / tests) ─────────────────────────
+    /// @dev Parses the raw bytes returned by Somnia's executor and evaluates the condition.
+    ///      Empty result is treated as not-triggered (oracle fetch failed).
+    function _evaluateFromResult(TriggerCondition memory cond, bytes memory result)
+        internal pure returns (bool)
+    {
+        if (result.length == 0) return false;
+
+        if (cond.triggerType == TriggerType.PriceBelow || cond.triggerType == TriggerType.PriceAbove) {
+            (, uint256 threshold) = abi.decode(cond.params, (address, uint256));
+            uint256 price = abi.decode(result, (uint256));
+            return cond.triggerType == TriggerType.PriceBelow
+                ? price < threshold
+                : price > threshold;
+        }
+        if (cond.triggerType == TriggerType.HealthFactor) {
+            (,, uint256 minHF) = abi.decode(cond.params, (address, address, uint256));
+            uint256 hf = abi.decode(result, (uint256));
+            return hf < minHF;
+        }
+        if (cond.triggerType == TriggerType.APYSpread) {
+            (,, uint256 minSpreadBPS) = abi.decode(cond.params, (string, string, uint256));
+            (uint256 apyA, uint256 apyB) = abi.decode(result, (uint256, uint256));
+            uint256 spread = apyA > apyB ? apyA - apyB : apyB - apyA;
+            return spread >= minSpreadBPS;
+        }
+        return false;
+    }
+
+    // ─── Encoding helpers (pure) ──────────────────────────────────────────────
 
     function encodePriceTrigger(address token, uint256 thresholdUSD, bool triggerBelow)
-        external
-        pure
-        returns (bytes memory)
+        external pure returns (bytes memory)
     {
         return abi.encode(TriggerCondition({
             triggerType: triggerBelow ? TriggerType.PriceBelow : TriggerType.PriceAbove,
@@ -191,9 +206,7 @@ contract SomniaAgentsAdapter {
     }
 
     function encodeHealthFactorTrigger(address protocol, address user, uint256 minHF)
-        external
-        pure
-        returns (bytes memory)
+        external pure returns (bytes memory)
     {
         return abi.encode(TriggerCondition({
             triggerType: TriggerType.HealthFactor,
@@ -202,9 +215,7 @@ contract SomniaAgentsAdapter {
     }
 
     function encodeAPYSpreadTrigger(string calldata poolA, string calldata poolB, uint256 minSpreadBPS)
-        external
-        pure
-        returns (bytes memory)
+        external pure returns (bytes memory)
     {
         return abi.encode(TriggerCondition({
             triggerType: TriggerType.APYSpread,
@@ -213,28 +224,11 @@ contract SomniaAgentsAdapter {
     }
 
     function encodeBlockIntervalTrigger(uint256 anchorBlock, uint256 intervalBlocks)
-        external
-        pure
-        returns (bytes memory)
+        external pure returns (bytes memory)
     {
         return abi.encode(TriggerCondition({
             triggerType: TriggerType.BlockInterval,
             params: abi.encode(anchorBlock, intervalBlocks)
         }));
-    }
-
-    // ─── Internal utils ───────────────────────────────────────────────────────
-
-    function _toHexString(address addr) internal pure returns (string memory) {
-        bytes memory buffer = new bytes(42);
-        buffer[0] = "0";
-        buffer[1] = "x";
-        bytes memory hex_chars = "0123456789abcdef";
-        uint160 value = uint160(addr);
-        for (uint256 i = 41; i >= 2; i--) {
-            buffer[i] = hex_chars[value & 0xf];
-            value >>= 4;
-        }
-        return string(buffer);
     }
 }

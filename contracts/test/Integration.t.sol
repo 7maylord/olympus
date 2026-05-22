@@ -8,23 +8,34 @@ import "../src/TaskRegistry.sol";
 import "../src/SomniaAgentsAdapter.sol";
 import "../src/ExecutionVerifier.sol";
 
-/// @dev Mock Somnia compute layer — returns configurable price/health data per call index.
+/// @dev Mock Somnia compute layer — calls onAgentResponse synchronously within createTask.
+///      Decodes the trigger type from taskData to return appropriate values.
 contract MockSomnia {
-    bool public priceTriggered   = true;
-    bool public healthTriggered  = true;
+    bool public priceTriggered  = true;
+    bool public healthTriggered = true;
+    SomniaAgentsAdapter public adapter;
+    uint256 public nextId;
 
-    function setPrice(bool triggered)  external { priceTriggered  = triggered; }
-    function setHealth(bool triggered) external { healthTriggered = triggered; }
+    function setAdapter(address a)        external { adapter = SomniaAgentsAdapter(a); }
+    function setPrice(bool triggered)     external { priceTriggered  = triggered; }
+    function setHealth(bool triggered)    external { healthTriggered = triggered; }
 
-    function queryAPI(string calldata url, string calldata) external view returns (bytes memory) {
-        // "https://api." is a 12-char common prefix; index 12 distinguishes the service:
-        // "https://api.lending-protocol..." → urlBytes[12] == 'l'
-        // "https://api.price-feed..."       → urlBytes[12] == 'p'
-        bytes memory urlBytes = bytes(url);
-        if (urlBytes.length > 12 && urlBytes[12] == "l") {
-            return abi.encode(healthTriggered ? uint256(1.1e18) : uint256(2.0e18));
+    function createTask(uint256, bytes calldata taskData) external payable returns (uint256 id) {
+        id = ++nextId;
+        (bytes memory trigger,) = abi.decode(taskData, (bytes, string));
+        SomniaAgentsAdapter.TriggerCondition memory cond =
+            abi.decode(trigger, (SomniaAgentsAdapter.TriggerCondition));
+
+        bytes memory result;
+        if (cond.triggerType == SomniaAgentsAdapter.TriggerType.HealthFactor) {
+            result = abi.encode(healthTriggered ? uint256(1.1e18) : uint256(2.0e18));
+        } else if (cond.triggerType == SomniaAgentsAdapter.TriggerType.APYSpread) {
+            result = abi.encode(uint256(800), uint256(500)); // 300 BPS spread > any threshold used
+        } else {
+            result = abi.encode(priceTriggered ? uint256(1_900e18) : uint256(2_100e18));
         }
-        return abi.encode(priceTriggered ? uint256(1_900e18) : uint256(2_100e18));
+
+        adapter.onAgentResponse(id, taskData, result);
     }
 }
 
@@ -63,6 +74,7 @@ contract IntegrationTest is Test {
         agentReg.setVerifier(address(taskReg));
         escrow.setTaskRegistry(address(taskReg));
         taskReg.setExecutionVerifier(address(verifier));
+        mockSomnia.setAdapter(address(adapter));
 
         // Fund and register 10 agents
         for (uint256 i = 0; i < 10; i++) {
@@ -113,13 +125,19 @@ contract IntegrationTest is Test {
         return adapter.encodeBlockIntervalTrigger(block.number, 10);
     }
 
+    function _primeOracle(bytes memory trigger) internal {
+        adapter.requestOracleUpdate(trigger);
+    }
+
     // ─── Task type: Conditional Swap ─────────────────────────────────────────
 
     function test_task_type_conditional_swap_full_lifecycle() public {
-        mockSomnia.setPrice(true); // price < threshold → triggered
-        uint256 taskId = _post(TAG_SWAP, _priceTrigger());
+        mockSomnia.setPrice(true);
+        bytes memory trigger = _priceTrigger();
+        uint256 taskId = _post(TAG_SWAP, trigger);
 
         _claim(agents[0], taskId);
+        _primeOracle(trigger);
         _submitAndFinalize(agents[0], taskId);
 
         TaskRegistry.Task memory t = taskReg.getTask(taskId);
@@ -128,8 +146,10 @@ contract IntegrationTest is Test {
 
     function test_task_type_conditional_swap_trigger_not_met_reverts() public {
         mockSomnia.setPrice(false); // price > threshold → not triggered
-        uint256 taskId = _post(TAG_SWAP, _priceTrigger());
+        bytes memory trigger = _priceTrigger();
+        uint256 taskId = _post(TAG_SWAP, trigger);
         _claim(agents[0], taskId);
+        _primeOracle(trigger); // cache: not triggered
 
         vm.prank(agents[0]);
         vm.expectRevert(ExecutionVerifier.TriggerConditionNotMet.selector);
@@ -140,9 +160,11 @@ contract IntegrationTest is Test {
 
     function test_task_type_collateral_guard_full_lifecycle() public {
         mockSomnia.setHealth(true); // HF = 1.1 < 1.3 → triggered
-        uint256 taskId = _post(TAG_GUARD, _healthTrigger());
+        bytes memory trigger = _healthTrigger();
+        uint256 taskId = _post(TAG_GUARD, trigger);
 
         _claim(agents[1], taskId);
+        _primeOracle(trigger);
         _submitAndFinalize(agents[1], taskId);
 
         TaskRegistry.Task memory t = taskReg.getTask(taskId);
@@ -172,8 +194,9 @@ contract IntegrationTest is Test {
 
         _claim(agents[3], taskId);
 
-        // Advance 10 blocks so interval trigger fires
+        // Advance 10 blocks so interval trigger fires, then prime oracle (pure eval, no mock needed)
         vm.roll(anchor + 10);
+        _primeOracle(trigger);
         _submitAndFinalize(agents[3], taskId);
 
         TaskRegistry.Task memory t = taskReg.getTask(taskId);
@@ -271,12 +294,13 @@ contract IntegrationTest is Test {
         );
 
         _claim(agents[0], taskId);
-
+        _primeOracle(trigger); // cache: triggered
         vm.prank(agents[0]);
         taskReg.submitProof(taskId, bytes32("bad_proof"));
 
-        // Condition no longer holds when poster disputes
+        // Price recovered — update cache before disputing
         mockSomnia.setPrice(false);
+        _primeOracle(trigger);
         uint256 posterBefore = poster.balance;
 
         vm.prank(poster);
@@ -295,7 +319,7 @@ contract IntegrationTest is Test {
         address poster = makeAddr("poster2");
         vm.deal(poster, 10 ether);
 
-        bytes memory trigger = _priceTrigger(); // pre-compute before prank
+        bytes memory trigger = _priceTrigger();
         mockSomnia.setPrice(true);
         vm.prank(poster);
         uint256 taskId = taskReg.postTask{value: TOTAL_VALUE}(
@@ -303,12 +327,13 @@ contract IntegrationTest is Test {
         );
 
         _claim(agents[0], taskId);
+        _primeOracle(trigger); // cache: triggered
         vm.prank(agents[0]);
         taskReg.submitProof(taskId, bytes32("txhash"));
 
         uint256 agentBefore = agents[0].balance;
 
-        // Poster disputes but condition still holds → dispute fails
+        // Poster disputes — cache still says triggered → dispute fails
         vm.prank(poster);
         verifier.disputeExecution(taskId);
 

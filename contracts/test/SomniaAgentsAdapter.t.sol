@@ -4,16 +4,24 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/SomniaAgentsAdapter.sol";
 
-/// @dev Mock ISomniaAgents that returns pre-programmed values per URL key.
+/// @dev Mock ISomniaAgents — calls onAgentResponse synchronously within createTask
+///      so tests stay single-transaction. Keyed by keccak256(trigger bytes).
 contract MockSomniaAgents {
-    mapping(bytes32 => bytes) private _responses;
+    SomniaAgentsAdapter public adapter;
+    mapping(bytes32 => bytes) private _results; // keccak256(trigger) => encoded result
+    uint256 public nextId;
 
-    function setResponse(string calldata url, bytes calldata value) external {
-        _responses[keccak256(bytes(url))] = value;
+    function setAdapter(address a) external { adapter = SomniaAgentsAdapter(a); }
+
+    /// @dev taskData = abi.encode(trigger, priceFeedBase) as encoded by requestOracleUpdate.
+    function setResult(bytes calldata trigger, bytes calldata result) external {
+        _results[keccak256(trigger)] = result;
     }
 
-    function queryAPI(string calldata url, string calldata) external view returns (bytes memory) {
-        return _responses[keccak256(bytes(url))];
+    function createTask(uint256, bytes calldata taskData) external payable returns (uint256 id) {
+        id = ++nextId;
+        (bytes memory trigger,) = abi.decode(taskData, (bytes, string));
+        adapter.onAgentResponse(id, taskData, _results[keccak256(trigger)]);
     }
 }
 
@@ -21,240 +29,188 @@ contract SomniaAgentsAdapterTest is Test {
     SomniaAgentsAdapter adapter;
     MockSomniaAgents    mock;
 
-    address constant TOKEN       = address(0xBEEF);
-    address constant PROTOCOL    = address(0xCAFE);
-    address constant USER        = address(0xDEAD);
+    address constant TOKEN    = address(0xBEEF);
+    address constant PROTOCOL = address(0xCAFE);
+    address constant USER     = address(0xDEAD);
 
-    string constant PRICE_BASE   = "https://api.price-feed.xyz/v1/";
-    string constant POOL_A       = "pool-a-id";
-    string constant POOL_B       = "pool-b-id";
+    string constant PRICE_BASE = "https://api.price-feed.xyz/v1/";
+    string constant POOL_A     = "pool-a-id";
+    string constant POOL_B     = "pool-b-id";
 
     function setUp() public {
         mock    = new MockSomniaAgents();
         adapter = new SomniaAgentsAdapter(address(mock), PRICE_BASE);
+        mock.setAdapter(address(adapter));
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    function _priceUrl(address token) internal pure returns (string memory) {
-        // Reproduce the adapter's _toHexString output
-        bytes memory buf = new bytes(42);
-        buf[0] = "0"; buf[1] = "x";
-        bytes memory hex_chars = "0123456789abcdef";
-        uint160 v = uint160(token);
-        for (uint256 i = 41; i >= 2; i--) {
-            buf[i] = hex_chars[v & 0xf];
-            v >>= 4;
-        }
-        return string(abi.encodePacked(PRICE_BASE, string(buf)));
+    function _primePrice(address token, uint256 threshold, bool triggerBelow, uint256 price)
+        internal returns (bytes memory trigger)
+    {
+        trigger = adapter.encodePriceTrigger(token, threshold, triggerBelow);
+        mock.setResult(trigger, abi.encode(price));
+        adapter.requestOracleUpdate(trigger);
     }
 
-    function _setPrice(address token, uint256 price) internal {
-        mock.setResponse(_priceUrl(token), abi.encode(price));
+    function _primeHF(address protocol, address user, uint256 minHF, uint256 actualHF)
+        internal returns (bytes memory trigger)
+    {
+        trigger = adapter.encodeHealthFactorTrigger(protocol, user, minHF);
+        mock.setResult(trigger, abi.encode(actualHF));
+        adapter.requestOracleUpdate(trigger);
+    }
+
+    function _primeAPY(string memory poolA, string memory poolB, uint256 minSpread, uint256 apyA, uint256 apyB)
+        internal returns (bytes memory trigger)
+    {
+        trigger = adapter.encodeAPYSpreadTrigger(poolA, poolB, minSpread);
+        mock.setResult(trigger, abi.encode(apyA, apyB));
+        adapter.requestOracleUpdate(trigger);
     }
 
     // ─── Price triggers ───────────────────────────────────────────────────────
 
     function test_price_below_triggers_when_price_under_threshold() public {
-        _setPrice(TOKEN, 1_900e18); // $1,900
-
-        bytes memory encoded = adapter.encodePriceTrigger(TOKEN, 2_000e18, true);
-        bool triggered = adapter.evaluate(encoded);
-        assertTrue(triggered);
+        bytes memory t = _primePrice(TOKEN, 2_000e18, true, 1_900e18);
+        assertTrue(adapter.evaluate(t));
     }
 
     function test_price_below_does_not_trigger_when_price_above() public {
-        _setPrice(TOKEN, 2_100e18); // $2,100
-
-        bytes memory encoded = adapter.encodePriceTrigger(TOKEN, 2_000e18, true);
-        bool triggered = adapter.evaluate(encoded);
-        assertFalse(triggered);
+        bytes memory t = _primePrice(TOKEN, 2_000e18, true, 2_100e18);
+        assertFalse(adapter.evaluate(t));
     }
 
     function test_price_above_triggers_when_price_over_threshold() public {
-        _setPrice(TOKEN, 3_500e18);
-
-        bytes memory encoded = adapter.encodePriceTrigger(TOKEN, 3_000e18, false);
-        bool triggered = adapter.evaluate(encoded);
-        assertTrue(triggered);
+        bytes memory t = _primePrice(TOKEN, 3_000e18, false, 3_500e18);
+        assertTrue(adapter.evaluate(t));
     }
 
     function test_price_above_does_not_trigger_when_price_below() public {
-        _setPrice(TOKEN, 2_500e18);
-
-        bytes memory encoded = adapter.encodePriceTrigger(TOKEN, 3_000e18, false);
-        bool triggered = adapter.evaluate(encoded);
-        assertFalse(triggered);
+        bytes memory t = _primePrice(TOKEN, 3_000e18, false, 2_500e18);
+        assertFalse(adapter.evaluate(t));
     }
 
-    function test_price_at_threshold_boundary_below() public {
-        _setPrice(TOKEN, 2_000e18); // exactly at threshold
-
-        bytes memory encoded = adapter.encodePriceTrigger(TOKEN, 2_000e18, true);
-        bool triggered = adapter.evaluate(encoded);
-        assertFalse(triggered); // strictly less-than
+    function test_price_at_threshold_boundary_not_triggered() public {
+        bytes memory t = _primePrice(TOKEN, 2_000e18, true, 2_000e18);
+        assertFalse(adapter.evaluate(t)); // strictly less-than
     }
 
-    function test_evaluate_price_trigger_convenience_wrapper() public {
-        _setPrice(TOKEN, 1_500e18);
-        bool triggered = adapter.evaluatePriceTrigger(TOKEN, 2_000e18, true);
-        assertTrue(triggered);
-    }
-
-    function test_price_feed_failed_reverts_on_empty_response() public {
-        // No response set — mock returns empty bytes
-        bytes memory encoded = adapter.encodePriceTrigger(TOKEN, 2_000e18, true);
-        vm.expectRevert(SomniaAgentsAdapter.PriceFeedFailed.selector);
-        adapter.evaluate(encoded);
+    function test_empty_oracle_response_not_triggered() public {
+        bytes memory trigger = adapter.encodePriceTrigger(TOKEN, 2_000e18, true);
+        // No setResult call — mock returns empty bytes by default
+        adapter.requestOracleUpdate(trigger);
+        assertFalse(adapter.evaluate(trigger));
     }
 
     function test_price_trigger_reverts_zero_address_token() public {
-        SomniaAgentsAdapter.TriggerCondition memory cond = SomniaAgentsAdapter.TriggerCondition({
-            triggerType: SomniaAgentsAdapter.TriggerType.PriceBelow,
-            params: abi.encode(address(0), uint256(1_000e18))
-        });
+        bytes memory trigger = adapter.encodePriceTrigger(address(0), 2_000e18, true);
         vm.expectRevert(SomniaAgentsAdapter.InvalidParams.selector);
-        adapter.evaluate(abi.encode(cond));
+        adapter.requestOracleUpdate(trigger);
     }
 
     // ─── Health factor trigger ────────────────────────────────────────────────
 
-    function _setHealthFactor(address protocol, address user, uint256 hf) internal {
-        bytes memory buf_p = new bytes(42);
-        bytes memory buf_u = new bytes(42);
-        bytes memory hex_chars = "0123456789abcdef";
-        buf_p[0] = "0"; buf_p[1] = "x";
-        buf_u[0] = "0"; buf_u[1] = "x";
-        uint160 vp = uint160(protocol);
-        uint160 vu = uint160(user);
-        for (uint256 i = 41; i >= 2; i--) {
-            buf_p[i] = hex_chars[vp & 0xf]; vp >>= 4;
-            buf_u[i] = hex_chars[vu & 0xf]; vu >>= 4;
-        }
-        string memory url = string(abi.encodePacked(
-            "https://api.lending-protocol.xyz/v1/health/",
-            string(buf_p), "/", string(buf_u)
-        ));
-        mock.setResponse(url, abi.encode(hf));
-    }
-
     function test_health_factor_triggers_when_below_min() public {
-        _setHealthFactor(PROTOCOL, USER, 1.1e18); // HF = 1.1
-
-        bytes memory encoded = adapter.encodeHealthFactorTrigger(PROTOCOL, USER, 1.3e18);
-        bool triggered = adapter.evaluate(encoded);
-        assertTrue(triggered);
+        bytes memory t = _primeHF(PROTOCOL, USER, 1.3e18, 1.1e18);
+        assertTrue(adapter.evaluate(t));
     }
 
     function test_health_factor_does_not_trigger_when_above_min() public {
-        _setHealthFactor(PROTOCOL, USER, 1.5e18);
-
-        bytes memory encoded = adapter.encodeHealthFactorTrigger(PROTOCOL, USER, 1.3e18);
-        bool triggered = adapter.evaluate(encoded);
-        assertFalse(triggered);
+        bytes memory t = _primeHF(PROTOCOL, USER, 1.3e18, 1.5e18);
+        assertFalse(adapter.evaluate(t));
     }
 
-    function test_health_factor_reverts_on_empty_response() public {
-        bytes memory encoded = adapter.encodeHealthFactorTrigger(PROTOCOL, USER, 1.3e18);
-        vm.expectRevert(SomniaAgentsAdapter.HealthFactorFailed.selector);
-        adapter.evaluate(encoded);
+    function test_health_factor_empty_response_not_triggered() public {
+        bytes memory trigger = adapter.encodeHealthFactorTrigger(PROTOCOL, USER, 1.3e18);
+        adapter.requestOracleUpdate(trigger);
+        assertFalse(adapter.evaluate(trigger));
     }
 
     function test_health_factor_reverts_zero_address() public {
-        SomniaAgentsAdapter.TriggerCondition memory cond = SomniaAgentsAdapter.TriggerCondition({
-            triggerType: SomniaAgentsAdapter.TriggerType.HealthFactor,
-            params: abi.encode(address(0), USER, uint256(1.3e18))
-        });
+        bytes memory trigger = adapter.encodeHealthFactorTrigger(address(0), USER, 1.3e18);
         vm.expectRevert(SomniaAgentsAdapter.InvalidParams.selector);
-        adapter.evaluate(abi.encode(cond));
+        adapter.requestOracleUpdate(trigger);
     }
 
     // ─── APY spread trigger ───────────────────────────────────────────────────
 
-    function _setAPY(string memory pool, uint256 apyBPS) internal {
-        string memory url = string(abi.encodePacked("https://api.defi-yields.xyz/v1/pool/", pool));
-        mock.setResponse(url, abi.encode(apyBPS));
-    }
-
     function test_apy_spread_triggers_when_spread_exceeds_threshold() public {
-        _setAPY(POOL_A, 800);  // 8%
-        _setAPY(POOL_B, 500);  // 5% → spread = 300 BPS
-
-        bytes memory encoded = adapter.encodeAPYSpreadTrigger(POOL_A, POOL_B, 200);
-        bool triggered = adapter.evaluate(encoded);
-        assertTrue(triggered);
+        bytes memory t = _primeAPY(POOL_A, POOL_B, 200, 800, 500); // 300 BPS spread
+        assertTrue(adapter.evaluate(t));
     }
 
     function test_apy_spread_does_not_trigger_when_below_threshold() public {
-        _setAPY(POOL_A, 520);
-        _setAPY(POOL_B, 500); // spread = 20 BPS
-
-        bytes memory encoded = adapter.encodeAPYSpreadTrigger(POOL_A, POOL_B, 200);
-        bool triggered = adapter.evaluate(encoded);
-        assertFalse(triggered);
+        bytes memory t = _primeAPY(POOL_A, POOL_B, 200, 520, 500); // 20 BPS spread
+        assertFalse(adapter.evaluate(t));
     }
 
     function test_apy_spread_works_regardless_of_pool_order() public {
-        _setAPY(POOL_A, 500);
-        _setAPY(POOL_B, 800); // B > A — spread still 300 BPS
-
-        bytes memory encoded = adapter.encodeAPYSpreadTrigger(POOL_A, POOL_B, 200);
-        bool triggered = adapter.evaluate(encoded);
-        assertTrue(triggered);
+        bytes memory t = _primeAPY(POOL_A, POOL_B, 200, 500, 800); // B > A, spread still 300
+        assertTrue(adapter.evaluate(t));
     }
 
-    function test_apy_spread_reverts_on_missing_pool() public {
-        _setAPY(POOL_A, 800);
-        // POOL_B not set
-
-        bytes memory encoded = adapter.encodeAPYSpreadTrigger(POOL_A, POOL_B, 200);
-        vm.expectRevert(SomniaAgentsAdapter.APYFetchFailed.selector);
-        adapter.evaluate(encoded);
+    function test_apy_spread_empty_response_not_triggered() public {
+        bytes memory trigger = adapter.encodeAPYSpreadTrigger(POOL_A, POOL_B, 200);
+        adapter.requestOracleUpdate(trigger);
+        assertFalse(adapter.evaluate(trigger));
     }
 
     // ─── Block interval trigger ───────────────────────────────────────────────
 
     function test_block_interval_triggers_on_exact_multiple() public {
-        vm.roll(1000); // current block
-        bytes memory encoded = adapter.encodeBlockIntervalTrigger(0, 100);
-        bool triggered = adapter.evaluate(encoded);
-        assertTrue(triggered); // 1000 % 100 == 0 and 1000 > 0
+        vm.roll(1000);
+        bytes memory t = adapter.encodeBlockIntervalTrigger(0, 100);
+        adapter.requestOracleUpdate(t);
+        assertTrue(adapter.evaluate(t));
     }
 
     function test_block_interval_does_not_trigger_between_multiples() public {
         vm.roll(1050);
-        bytes memory encoded = adapter.encodeBlockIntervalTrigger(0, 100);
-        bool triggered = adapter.evaluate(encoded);
-        assertFalse(triggered); // 1050 % 100 != 0
+        bytes memory t = adapter.encodeBlockIntervalTrigger(0, 100);
+        adapter.requestOracleUpdate(t);
+        assertFalse(adapter.evaluate(t));
     }
 
     function test_block_interval_uses_anchor_block() public {
         vm.roll(1100);
-        bytes memory encoded = adapter.encodeBlockIntervalTrigger(100, 100);
-        bool triggered = adapter.evaluate(encoded);
-        assertTrue(triggered); // (1100 - 100) % 100 == 0
+        bytes memory t = adapter.encodeBlockIntervalTrigger(100, 100);
+        adapter.requestOracleUpdate(t);
+        assertTrue(adapter.evaluate(t));
     }
 
     function test_block_interval_does_not_trigger_at_anchor() public {
         vm.roll(100);
-        bytes memory encoded = adapter.encodeBlockIntervalTrigger(100, 100);
-        bool triggered = adapter.evaluate(encoded);
-        assertFalse(triggered); // block.number == anchorBlock, not > anchorBlock
+        bytes memory t = adapter.encodeBlockIntervalTrigger(100, 100);
+        adapter.requestOracleUpdate(t);
+        assertFalse(adapter.evaluate(t));
     }
 
     function test_block_interval_reverts_zero_interval() public {
-        bytes memory encoded = adapter.encodeBlockIntervalTrigger(0, 0);
+        bytes memory t = adapter.encodeBlockIntervalTrigger(0, 0);
         vm.expectRevert(SomniaAgentsAdapter.InvalidParams.selector);
-        adapter.evaluate(encoded);
+        adapter.requestOracleUpdate(t);
     }
 
-    // ─── Unsupported trigger type ─────────────────────────────────────────────
+    // ─── Cache staleness ──────────────────────────────────────────────────────
 
-    function test_unsupported_trigger_type_reverts() public {
-        // Craft a raw TriggerCondition with an out-of-range type value (5)
-        bytes memory encoded = abi.encode(uint8(5), bytes(""));
-        vm.expectRevert();
-        adapter.evaluate(encoded);
+    function test_evaluate_reverts_when_no_cache() public {
+        bytes memory t = adapter.encodePriceTrigger(TOKEN, 2_000e18, true);
+        vm.expectRevert(SomniaAgentsAdapter.OracleResultStale.selector);
+        adapter.evaluate(t);
+    }
+
+    function test_evaluate_reverts_when_cache_expired() public {
+        bytes memory t = _primePrice(TOKEN, 2_000e18, true, 1_900e18);
+        vm.roll(block.number + adapter.CACHE_VALID_BLOCKS() + 1);
+        vm.expectRevert(SomniaAgentsAdapter.OracleResultStale.selector);
+        adapter.evaluate(t);
+    }
+
+    function test_evaluate_succeeds_at_last_valid_block() public {
+        bytes memory t = _primePrice(TOKEN, 2_000e18, true, 1_900e18);
+        vm.roll(block.number + adapter.CACHE_VALID_BLOCKS());
+        assertTrue(adapter.evaluate(t)); // exactly at boundary — still valid
     }
 
     // ─── Encoding helpers (pure — no mock needed) ─────────────────────────────
@@ -295,11 +251,12 @@ contract SomniaAgentsAdapterTest is Test {
     function testFuzz_price_below_trigger(uint256 price, uint256 threshold) public {
         vm.assume(price > 0 && price < type(uint128).max);
         vm.assume(threshold > 0 && threshold < type(uint128).max);
-        _setPrice(TOKEN, price);
 
-        bytes memory encoded = adapter.encodePriceTrigger(TOKEN, threshold, true);
-        bool triggered = adapter.evaluate(encoded);
-        assertEq(triggered, price < threshold);
+        bytes memory trigger = adapter.encodePriceTrigger(TOKEN, threshold, true);
+        mock.setResult(trigger, abi.encode(price));
+        adapter.requestOracleUpdate(trigger);
+
+        assertEq(adapter.evaluate(trigger), price < threshold);
     }
 
     function testFuzz_block_interval_trigger(uint256 anchor, uint256 interval, uint256 currentBlock) public {
@@ -308,8 +265,8 @@ contract SomniaAgentsAdapterTest is Test {
         currentBlock = bound(currentBlock, anchor + 1, anchor + interval * 100);
 
         vm.roll(currentBlock);
-        bytes memory encoded = adapter.encodeBlockIntervalTrigger(anchor, interval);
-        bool triggered = adapter.evaluate(encoded);
-        assertEq(triggered, (currentBlock - anchor) % interval == 0);
+        bytes memory t = adapter.encodeBlockIntervalTrigger(anchor, interval);
+        adapter.requestOracleUpdate(t);
+        assertEq(adapter.evaluate(t), (currentBlock - anchor) % interval == 0);
     }
 }

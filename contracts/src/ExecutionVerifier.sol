@@ -181,14 +181,11 @@ contract ExecutionVerifier is IERC8004Validation {
 
     // ─── Internal ────────────────────────────────────────────────────────────
 
-    function _revalidate(bytes memory triggerCondition) internal returns (bool) {
+    // Reverts with OracleResultStale if cache is stale — poster must refresh oracle first.
+    function _revalidate(bytes memory triggerCondition) internal view returns (bool) {
         if (address(somniaAdapter) == address(0) || triggerCondition.length == 0) {
-            return true; // no condition to check — treat as valid
+            return true;
         }
-        try somniaAdapter.evaluate(triggerCondition) returns (bool triggered) {
-            return triggered;
-        } catch {
-            return false;
-        }
+        return somniaAdapter.evaluate(triggerCondition);
     }
 }
