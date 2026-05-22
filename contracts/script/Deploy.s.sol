@@ -24,12 +24,19 @@ import "../src/ExecutionVerifier.sol";
 ///     --verify
 contract Deploy is Script {
     function run() external {
-        address treasury      = vm.envAddress("TREASURY_ADDRESS");
-        address somniaAgents  = vm.envAddress("SOMNIA_AGENTS_ADDRESS");
-        string  memory priceBase = vm.envString("PRICE_FEED_BASE_URL");
-
-        uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployer    = vm.addr(deployerKey);
+
+        // Treasury defaults to deployer on testnet; override with TREASURY_ADDRESS in prod
+        address treasury = vm.envOr("TREASURY_ADDRESS", deployer);
+
+        // Somnia's native on-chain compute precompile — stub address for testnet until confirmed
+        address somniaAgents = vm.envOr("SOMNIA_AGENTS_ADDRESS", address(0));
+
+        string memory priceBase = vm.envOr(
+            "PRICE_FEED_BASE_URL",
+            string("https://api.price-feed.xyz/v1/")
+        );
 
         console2.log("=== Olympus Protocol Deployment ===");
         console2.log("Deployer  :", deployer);
