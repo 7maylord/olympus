@@ -1,11 +1,12 @@
 export default () => ({
   port: parseInt(process.env.PORT ?? '3000', 10),
   database: {
-    host:     process.env.DB_HOST     ?? 'localhost',
+    url:      process.env.DATABASE_URL ?? '',
+    host:     process.env.DB_HOST      ?? 'localhost',
     port:     parseInt(process.env.DB_PORT ?? '5432', 10),
-    username: process.env.DB_USER     ?? 'postgres',
-    password: process.env.DB_PASSWORD ?? 'postgres',
-    name:     process.env.DB_NAME     ?? 'olympus',
+    username: process.env.DB_USER      ?? 'postgres',
+    password: process.env.DB_PASSWORD  ?? 'postgres',
+    name:     process.env.DB_NAME      ?? 'olympus',
   },
   chain: {
     rpcUrl:              process.env.SOMNIA_RPC_URL            ?? 'https://dream-rpc.somnia.network',

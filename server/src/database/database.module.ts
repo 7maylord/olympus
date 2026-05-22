@@ -10,17 +10,25 @@ import { Task } from '../entities/task.entity';
   imports: [
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host:     config.get('database.host'),
-        port:     config.get<number>('database.port'),
-        username: config.get('database.username'),
-        password: config.get('database.password'),
-        database: config.get('database.name'),
-        entities: [Task, Agent, PendingSettlement, IndexerState],
-        synchronize: true,
-        logging: false,
-      }),
+      useFactory: (config: ConfigService) => {
+        const url = config.get<string>('database.url');
+        const entities = [Task, Agent, PendingSettlement, IndexerState];
+        if (url) {
+          return { type: 'postgres' as const, url, entities, synchronize: true, logging: false, ssl: { rejectUnauthorized: false } };
+        }
+        return {
+          type:        'postgres' as const,
+          host:        config.get<string>('database.host'),
+          port:        config.get<number>('database.port'),
+          username:    config.get<string>('database.username'),
+          password:    config.get<string>('database.password'),
+          database:    config.get<string>('database.name'),
+          entities,
+          synchronize: true,
+          logging:     false,
+          ssl:         false,
+        };
+      },
     }),
   ],
 })
