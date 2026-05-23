@@ -89,7 +89,7 @@ export function TaskCard({ task, index = 0 }: Props) {
           borderTop: '1px solid var(--border)',
         }}
       >
-        <div style={{ display: 'flex', align: 'center', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           {/* Poster */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
             <User size={12} />
