@@ -39,7 +39,7 @@ export class Task {
   @Column({ type: 'enum', enum: TaskStatus, default: TaskStatus.Open })
   status: TaskStatus;
 
-  @Column({ name: 'claimed_by', nullable: true })
+  @Column({ name: 'claimed_by', type: 'varchar', nullable: true })
   claimedBy: string | null;
 
   @Column({ name: 'claimed_at', type: 'bigint', nullable: true })
@@ -48,7 +48,7 @@ export class Task {
   @Column({ name: 'claim_window_seconds', type: 'int' })
   claimWindowSeconds: number;
 
-  @Column({ name: 'proof_tx_hash', nullable: true })
+  @Column({ name: 'proof_tx_hash', type: 'varchar', nullable: true })
   proofTxHash: string | null;
 
   @Column({ name: 'block_number', type: 'bigint' })
