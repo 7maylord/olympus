@@ -135,3 +135,20 @@ export function useExpireTask(taskId: bigint | undefined) {
 
   return { expireTask, hash, isPending, isConfirming, isSuccess, isError };
 }
+
+export function useSubmitProof(taskId: bigint | undefined) {
+  const { writeContract, data: hash, isPending, isError, error } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  const submitProof = (proofTxHash: `0x${string}`) => {
+    if (!taskId) return;
+    writeContract({
+      address: TASK_REGISTRY_ADDRESS,
+      abi: TaskRegistryABI,
+      functionName: 'submitProof',
+      args: [taskId, proofTxHash],
+    });
+  };
+
+  return { submitProof, hash, isPending, isConfirming, isSuccess, isError, error };
+}

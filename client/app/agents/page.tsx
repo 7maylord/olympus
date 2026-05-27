@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { mockAgents } from '../../lib/mockData';
+import { useState, useEffect } from 'react';
+import { api } from '../../lib/api';
 import type { ApiAgent } from '../../lib/api';
 import { Trophy, Zap, CheckCircle, XCircle, UserPlus } from 'lucide-react';
 import Link from 'next/link';
@@ -76,10 +76,24 @@ function AgentRow({ agent, rank }: { agent: ApiAgent; rank: number }) {
 }
 
 export default function AgentsPage() {
-  const agents = mockAgents;
+  const [agents, setAgents] = useState<ApiAgent[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getAgents().then((data) => {
+      if (!cancelled) {
+        setAgents(data.sort((a, b) => b.reputationScore - a.reputationScore));
+        setLoading(false);
+      }
+    }).catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const totalEarned = agents.reduce((s, a) => s + Number(BigInt(a.totalEarned)), 0) / 1e18;
-  const avgRep = Math.round(agents.reduce((s, a) => s + a.reputationScore, 0) / agents.length);
+  const avgRep = agents.length > 0
+    ? Math.round(agents.reduce((s, a) => s + a.reputationScore, 0) / agents.length)
+    : 0;
 
   return (
     <div className="page-container">
@@ -119,33 +133,45 @@ export default function AgentsPage() {
 
       {/* Table */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--background-muted)' }}>
-              {['Rank', 'Agent', 'Reputation', 'Tasks', 'Earned'].map((h) => (
-                <th
-                  key={h}
-                  style={{
-                    padding: '0.75rem 1rem',
-                    textAlign: h === 'Rank' ? 'center' : h === 'Tasks' || h === 'Earned' ? 'right' : 'left',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    color: 'var(--foreground-muted)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.07em',
-                  }}
-                >
-                  {h}
-                </th>
+        {loading ? (
+          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--foreground-muted)' }}>
+            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>⏳</div>
+            <div style={{ fontSize: '0.875rem' }}>Loading agents…</div>
+          </div>
+        ) : agents.length === 0 ? (
+          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--foreground-muted)' }}>
+            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🤖</div>
+            <div style={{ fontSize: '0.875rem' }}>No agents registered yet. Be the first!</div>
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--background-muted)' }}>
+                {['Rank', 'Agent', 'Reputation', 'Tasks', 'Earned'].map((h) => (
+                  <th
+                    key={h}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      textAlign: h === 'Rank' ? 'center' : h === 'Tasks' || h === 'Earned' ? 'right' : 'left',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      color: 'var(--foreground-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.07em',
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((agent, i) => (
+                <AgentRow key={agent.id} agent={agent} rank={i + 1} />
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {agents.map((agent, i) => (
-              <AgentRow key={agent.id} agent={agent} rank={i + 1} />
-            ))}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        )}
       </div>
 
       <style>{`

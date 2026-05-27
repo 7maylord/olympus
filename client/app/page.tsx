@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useState, useEffect } from 'react';
 import { TaskCard } from '../components/TaskCard';
-import { mockTasks, mockStats } from '../lib/mockData';
+import { api } from '../lib/api';
 import type { ApiTask, ApiStats, TaskStatus } from '../lib/api';
 import { Activity, TrendingUp, Users, Zap, CheckCircle } from 'lucide-react';
 
@@ -35,40 +34,38 @@ function StatCard({ icon, label, value, sub }: {
   );
 }
 
+const DEFAULT_STATS: ApiStats = {
+  totalTasks: 0, openTasks: 0, totalAgents: 0,
+  totalBounties: '0', completionRate: 0, avgClaimTimeMs: 0,
+};
+
 export default function HomePage() {
-  const [tasks, setTasks] = useState<ApiTask[]>(mockTasks);
-  const [stats] = useState<ApiStats>(mockStats);
+  const [tasks, setTasks] = useState<ApiTask[]>([]);
+  const [stats, setStats] = useState<ApiStats>(DEFAULT_STATS);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'All'>('All');
   const [capFilter, setCapFilter] = useState('All');
-  const [connected, setConnected] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
 
-  // WebSocket for real-time task events
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
-    const socket = io(apiUrl, { transports: ['websocket'], autoConnect: true });
-    socketRef.current = socket;
-
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
-
-    socket.on('task:posted', (task: ApiTask) => {
-      setTasks((prev) => [task, ...prev]);
-    });
-
-    socket.on('task:executed', ({ taskId }: { taskId: string }) => {
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: 'Executed' } : t))
-      );
-    });
-
-    socket.on('task:claimed', ({ taskId, agent }: { taskId: string; agent: string }) => {
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: 'Claimed', claimedBy: agent } : t))
-      );
-    });
-
-    return () => { socket.disconnect(); };
+    let cancelled = false;
+    async function load() {
+      try {
+        const [fetchedTasks, fetchedStats] = await Promise.all([
+          api.getTasks(),
+          api.getStats(),
+        ]);
+        if (!cancelled) {
+          setTasks(fetchedTasks);
+          setStats(fetchedStats);
+        }
+      } catch {
+        // backend may be waking up — silently keep empty state
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   const filtered = tasks.filter((t) => {
@@ -86,7 +83,7 @@ export default function HomePage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
           <div className="live-dot" />
           <span style={{ fontSize: '0.75rem', color: 'var(--green)', fontWeight: 600, letterSpacing: '0.04em' }}>
-            LIVE {connected ? '· CONNECTED' : '· MOCK DATA'}
+            LIVE {loading ? '· LOADING…' : '· SOMNIA TESTNET'}
           </span>
         </div>
         <h1
@@ -168,7 +165,13 @@ export default function HomePage() {
       </div>
 
       {/* Task grid */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--foreground-muted)' }}>
+          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</div>
+          <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Loading tasks…</div>
+          <div style={{ fontSize: '0.85rem' }}>Fetching from Somnia indexer.</div>
+        </div>
+      ) : filtered.length === 0 ? (
         <div
           className="card"
           style={{ padding: '3rem', textAlign: 'center', color: 'var(--foreground-muted)' }}

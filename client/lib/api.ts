@@ -59,14 +59,14 @@ export const api = {
     if (params?.minBounty) qs.set('minBounty', params.minBounty);
     if (params?.page) qs.set('page', String(params.page));
     if (params?.limit) qs.set('limit', String(params.limit));
-    return request<ApiTask[]>(`/tasks?${qs}`);
+    return request<ApiTask[]>(`/api/tasks?${qs}`);
   },
 
-  getTask: (id: string) => request<ApiTask>(`/tasks/${id}`),
+  getTask: (id: string) => request<ApiTask>(`/api/tasks/${id}`),
 
-  getAgents: (limit = 50) => request<ApiAgent[]>(`/agents?limit=${limit}`),
+  getAgents: (limit = 50) => request<ApiAgent[]>(`/api/agents?limit=${limit}`),
 
-  getAgent: (identifier: string) => request<ApiAgent>(`/agents/${identifier}`),
+  getAgent: (identifier: string) => request<ApiAgent>(`/api/agents/${identifier}`),
 
-  getStats: () => request<ApiStats>('/stats'),
+  getStats: () => request<ApiStats>('/api/stats'),
 };

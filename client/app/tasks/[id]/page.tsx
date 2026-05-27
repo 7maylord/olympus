@@ -5,12 +5,14 @@ import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { usePrivy } from '@privy-io/react-auth';
 import {
-  Clock, User, Zap, CheckCircle, AlertTriangle, ExternalLink, Copy, ArrowLeft,
+  CheckCircle, AlertTriangle, ExternalLink, Copy, ArrowLeft, Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
-import { mockTasks } from '@/lib/mockData';
+import { api } from '@/lib/api';
 import type { ApiTask } from '@/lib/api';
 import { useIsDisputable, useIsFinalizable, useFinalizeExecution, useDisputeExecution } from '@/hooks/useExecutionVerifier';
+import { useClaimTask, useSubmitProof, useExpireTask } from '@/hooks/useTaskRegistry';
+import { useMyAgent } from '@/hooks/useAgentRegistry';
 import clsx from 'clsx';
 
 function copyToClipboard(text: string) {
@@ -72,21 +74,41 @@ export default function TaskDetailPage() {
   const { authenticated } = usePrivy();
 
   const [task, setTask] = useState<ApiTask | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [proofInput, setProofInput] = useState('');
 
   const taskId = task ? BigInt(task.id) : undefined;
+  const { isRegistered } = useMyAgent();
+
   const { data: isDisputable } = useIsDisputable(taskId);
   const { data: isFinalizable } = useIsFinalizable(taskId);
+
+  const { claimTask, isPending: claimPending, isConfirming: claimConfirming, isSuccess: claimSuccess, error: claimError } = useClaimTask(taskId);
+  const { submitProof, isPending: proofPending, isConfirming: proofConfirming, isSuccess: proofSuccess, error: proofError } = useSubmitProof(taskId);
+  const { expireTask, isPending: expirePending, isConfirming: expireConfirming, isSuccess: expireSuccess } = useExpireTask(taskId);
   const { finalizeExecution, isPending: finPending, isConfirming: finConfirming, isSuccess: finSuccess } = useFinalizeExecution(taskId);
   const { disputeExecution, isPending: dispPending, isConfirming: dispConfirming, isSuccess: dispSuccess } = useDisputeExecution(taskId);
 
   useEffect(() => {
-    // In production: fetch from backend or chain
-    const found = mockTasks.find((t) => t.id === id) ?? null;
-    setTask(found);
+    let cancelled = false;
+    setLoadError(false);
+    api.getTask(id).then((data) => {
+      if (!cancelled) setTask(data);
+    }).catch(() => {
+      if (!cancelled) setLoadError(true);
+    });
+    return () => { cancelled = true; };
   }, [id]);
 
-  if (!task) {
+  // Refresh task data after any successful action
+  useEffect(() => {
+    if (claimSuccess || proofSuccess || expireSuccess || finSuccess || dispSuccess) {
+      api.getTask(id).then(setTask).catch(() => {});
+    }
+  }, [claimSuccess, proofSuccess, expireSuccess, finSuccess, dispSuccess, id]);
+
+  if (loadError) {
     return (
       <div className="page-container" style={{ textAlign: 'center', paddingTop: '4rem' }}>
         <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🔍</div>
@@ -96,9 +118,24 @@ export default function TaskDetailPage() {
     );
   }
 
+  if (!task) {
+    return (
+      <div className="page-container" style={{ textAlign: 'center', paddingTop: '4rem' }}>
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⏳</div>
+        <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Loading task…</div>
+      </div>
+    );
+  }
+
   const isDisputableBool = Boolean(isDisputable);
   const isFinalizableBool = Boolean(isFinalizable);
   const isPoster = address?.toLowerCase() === task.poster.toLowerCase();
+  const isClaimer = address?.toLowerCase() === task.claimedBy?.toLowerCase();
+  const now = Math.floor(Date.now() / 1000);
+  const isExpired = Number(task.expiry) < now;
+  const canClaim = task.status === 'Open' && !isExpired && isRegistered && !isPoster;
+  const canSubmitProof = task.status === 'Claimed' && isClaimer;
+  const canExpire = task.status === 'Open' && isExpired;
   const statusClass = `badge-${task.status.toLowerCase()}`;
 
   const handleCopy = (text: string) => {
@@ -175,14 +212,59 @@ export default function TaskDetailPage() {
             Actions
           </h2>
 
-          {!authenticated && (
+          {!authenticated ? (
             <p style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)' }}>
               Connect your wallet to interact with this task.
             </p>
-          )}
-
-          {authenticated && (
+          ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+
+              {/* Claim */}
+              {canClaim && (
+                <div>
+                  <button
+                    className="btn-primary"
+                    style={{ width: '100%' }}
+                    onClick={() => claimTask()}
+                    disabled={claimPending || claimConfirming}
+                  >
+                    {claimPending || claimConfirming
+                      ? <><Loader2 size={14} className="animate-spin" /> Claiming…</>
+                      : 'Claim Task · 0.0001 STT bond'}
+                  </button>
+                  {claimSuccess && <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--green)' }}>✓ Task claimed!</div>}
+                  {claimError && <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--red)' }}>{claimError.message}</div>}
+                </div>
+              )}
+
+              {/* Submit Proof */}
+              {canSubmitProof && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', display: 'block', marginBottom: 4 }}>
+                    Proof Transaction Hash
+                  </label>
+                  <input
+                    className="input"
+                    placeholder="0x…"
+                    value={proofInput}
+                    onChange={(e) => setProofInput(e.target.value)}
+                    style={{ marginBottom: '0.5rem' }}
+                  />
+                  <button
+                    className="btn-primary"
+                    style={{ width: '100%' }}
+                    onClick={() => submitProof(proofInput as `0x${string}`)}
+                    disabled={proofPending || proofConfirming || !proofInput.startsWith('0x')}
+                  >
+                    {proofPending || proofConfirming
+                      ? <><Loader2 size={14} className="animate-spin" /> Submitting…</>
+                      : 'Submit Proof'}
+                  </button>
+                  {proofSuccess && <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--green)' }}>✓ Proof submitted!</div>}
+                  {proofError && <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--red)' }}>{proofError.message}</div>}
+                </div>
+              )}
+
               {/* Finalize */}
               {isFinalizableBool && (
                 <div>
@@ -193,13 +275,9 @@ export default function TaskDetailPage() {
                     disabled={finPending || finConfirming}
                   >
                     <CheckCircle size={15} />
-                    {finPending || finConfirming ? 'Finalizing…' : 'Finalize Execution'}
+                    {finPending || finConfirming ? <><Loader2 size={14} className="animate-spin" /> Finalizing…</> : 'Finalize Execution'}
                   </button>
-                  {finSuccess && (
-                    <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--green)' }}>
-                      ✓ Finalized! Bounty released.
-                    </div>
-                  )}
+                  {finSuccess && <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--green)' }}>✓ Finalized! Bounty released.</div>}
                 </div>
               )}
 
@@ -213,20 +291,33 @@ export default function TaskDetailPage() {
                     disabled={dispPending || dispConfirming}
                   >
                     <AlertTriangle size={15} />
-                    {dispPending || dispConfirming ? 'Raising Dispute…' : 'Dispute Execution'}
+                    {dispPending || dispConfirming ? <><Loader2 size={14} className="animate-spin" /> Raising Dispute…</> : 'Dispute Execution'}
                   </button>
                   <div style={{ marginTop: 4, fontSize: '0.7rem', color: 'var(--foreground-muted)' }}>
                     1-hour window to challenge execution
                   </div>
-                  {dispSuccess && (
-                    <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--red)' }}>
-                      ✓ Dispute raised.
-                    </div>
-                  )}
+                  {dispSuccess && <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--red)' }}>✓ Dispute raised.</div>}
                 </div>
               )}
 
-              {/* Proof link */}
+              {/* Expire */}
+              {canExpire && (
+                <div>
+                  <button
+                    className="btn-secondary"
+                    style={{ width: '100%' }}
+                    onClick={() => expireTask()}
+                    disabled={expirePending || expireConfirming}
+                  >
+                    {expirePending || expireConfirming
+                      ? <><Loader2 size={14} className="animate-spin" /> Expiring…</>
+                      : 'Expire Task & Refund Bounty'}
+                  </button>
+                  {expireSuccess && <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--green)' }}>✓ Task expired. Bounty refunded.</div>}
+                </div>
+              )}
+
+              {/* Proof explorer link */}
               {task.proofHash && (
                 <a
                   href={`https://shannon-explorer.somnia.network/tx/${task.proofHash}`}
@@ -239,9 +330,9 @@ export default function TaskDetailPage() {
                 </a>
               )}
 
-              {task.status === 'Open' && (
+              {task.status === 'Open' && !canClaim && !isPoster && (
                 <p style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', textAlign: 'center' }}>
-                  Waiting for an agent to claim this task.
+                  {isRegistered ? 'This task has already been claimed.' : 'Register as an agent to claim tasks.'}
                 </p>
               )}
             </div>
