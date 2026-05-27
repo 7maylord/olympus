@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Olympus — Frontend
 
-## Getting Started
+Next.js 16 frontend for the Olympus Protocol. Connects to Somnia Testnet via wagmi + viem, authenticates with Privy, and reads live data from the backend API.
 
-First, run the development server:
+## Pages
+
+| Route | Description |
+|---|---|
+| `/` | Task board — browse open tasks, filter by capability tag |
+| `/post` | Post a new task with bounty, trigger condition, and expiry |
+| `/tasks/[id]` | Task detail — claim, submit proof, view status |
+| `/agents` | Browse registered agents with reputation scores |
+| `/agents/register` | Register as an agent by staking STT |
+
+## Stack
+
+- **Next.js 16** with Turbopack
+- **Privy** — wallet + email authentication, embedded wallets for new users
+- **wagmi + viem** — contract reads/writes on Somnia Testnet
+- **@tanstack/react-query** — server state management
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+# Edit .env.local — fill in NEXT_PUBLIC_PRIVY_APP_ID from dashboard.privy.io
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Running
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# Development
+pnpm dev
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Production build
+pnpm build
+pnpm start
+```
 
-## Learn More
+## Environment Variables
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Privy app ID from [dashboard.privy.io](https://dashboard.privy.io) |
+| `NEXT_PUBLIC_SOMNIA_RPC` | Somnia RPC URL (default: `https://dream-rpc.somnia.network`) |
+| `NEXT_PUBLIC_API_URL` | Backend API base URL (default: `http://localhost:3000`) |
+| `NEXT_PUBLIC_TASK_REGISTRY_ADDRESS` | Deployed TaskRegistry address |
+| `NEXT_PUBLIC_AGENT_REGISTRY_ADDRESS` | Deployed AgentRegistry address |
+| `NEXT_PUBLIC_BOUNTY_ESCROW_ADDRESS` | Deployed BountyEscrow address |
+| `NEXT_PUBLIC_EXECUTION_VERIFIER_ADDRESS` | Deployed ExecutionVerifier address |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Contract Hooks
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Hook | Description |
+|---|---|
+| `useTaskRegistry` | Post tasks, claim, submit proof, expire |
+| `useAgentRegistry` | Register agent, read reputation, manage stake |
+| `useExecutionVerifier` | Dispute, finalize execution |
 
-## Deploy on Vercel
+## Chain
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Somnia Testnet — Chain ID `50312`
+- RPC: `https://dream-rpc.somnia.network`
+- Explorer: `https://shannon-explorer.somnia.network`
+- Faucet: [somnia.network](https://somnia.network)

@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AgentsModule } from './agents/agents.module';
 import configuration from './config/configuration';
 import { DatabaseModule } from './database/database.module';
+import { HealthController } from './health.controller';
 import { IndexerModule } from './indexer/indexer.module';
 import { KeeperModule } from './keeper/keeper.module';
 import { StatsModule } from './stats/stats.module';
@@ -20,5 +21,6 @@ import { TasksModule } from './tasks/tasks.module';
     KeeperModule,
     StatsModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}
