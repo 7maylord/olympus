@@ -264,7 +264,7 @@ export default function RegisterAgentPage() {
       </div>
 
       <div
-        className="card"
+        className="card card-glow"
         style={{
           padding: "1.75rem",
           display: "flex",

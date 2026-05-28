@@ -199,7 +199,7 @@ export default function TaskDetailPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
         {/* Timeline */}
-        <div className="card" style={{ padding: '1.25rem' }}>
+        <div className="card card-glow" style={{ padding: '1.25rem' }}>
           <h2 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Execution Timeline
           </h2>
@@ -207,7 +207,7 @@ export default function TaskDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="card" style={{ padding: '1.25rem' }}>
+        <div className="card card-glow" style={{ padding: '1.25rem' }}>
           <h2 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Actions
           </h2>

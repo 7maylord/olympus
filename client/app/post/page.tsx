@@ -431,8 +431,12 @@ export default function PostTaskPage() {
         </h1>
       </div>
 
-      <div className="card" style={{ padding: '2rem' }}>
-        <StepIndicator step={step} total={3} />
+      <div className="card card-glow" style={{ padding: '2rem', position: 'relative', overflow: 'hidden' }}>
+        {/* Glow overlay */}
+        <div style={{ position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%', background: 'radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08), transparent 50%)', pointerEvents: 'none' }} />
+        
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <StepIndicator step={step} total={3} />
 
         {step === 0 && (
           <StepTrigger
@@ -465,6 +469,7 @@ export default function PostTaskPage() {
             txHash={hash} error={error}
           />
         )}
+        </div>
       </div>
     </div>
   );

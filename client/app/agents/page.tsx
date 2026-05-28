@@ -120,7 +120,7 @@ export default function AgentsPage() {
           { icon: <Zap size={14} />, label: 'Total Earned', value: `${totalEarned.toFixed(2)} STT` },
           { icon: <Zap size={14} />, label: 'Avg Reputation', value: `${avgRep} / 1000` },
         ].map((s) => (
-          <div key={s.label} className="card" style={{ padding: '0.875rem 1.25rem', flex: 1, minWidth: 140 }}>
+          <div key={s.label} className="card card-glow" style={{ padding: '0.875rem 1.25rem', flex: 1, minWidth: 140 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent)', marginBottom: '0.35rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
               {s.icon} {s.label}
             </div>

@@ -2,27 +2,28 @@
 
 /* ── Design Tokens ───────────────────────────────────────────────────────── */
 :root {
-  --background:         #080b14;
-  --background-card:    #0e1320;
-  --background-muted:   #111827;
-  --border:             rgba(99, 102, 241, 0.15);
-  --border-hover:       rgba(99, 102, 241, 0.45);
-  --foreground:         #f1f5f9;
-  --foreground-muted:   #64748b;
-  --foreground-subtle:  #334155;
+  --background:         #050810;
+  --background-card:    rgba(14, 19, 32, 0.6);
+  --background-muted:   #0e1320;
+  --border:             rgba(99, 102, 241, 0.12);
+  --border-hover:       rgba(99, 102, 241, 0.4);
+  --foreground:         #f8fafc;
+  --foreground-muted:   #94a3b8;
+  --foreground-subtle:  #475569;
 
   --accent:             #6366f1;
-  --accent-glow:        rgba(99, 102, 241, 0.25);
+  --accent-glow:        rgba(99, 102, 241, 0.35);
   --accent-hover:       #818cf8;
   --gold:               #f59e0b;
-  --gold-glow:          rgba(245, 158, 11, 0.2);
+  --gold-glow:          rgba(245, 158, 11, 0.3);
   --green:              #10b981;
   --red:                #ef4444;
   --amber:              #f59e0b;
+  --cyan:               #06b6d4;
 
-  --radius:             0.75rem;
-  --radius-sm:          0.5rem;
-  --radius-lg:          1rem;
+  --radius:             1rem;
+  --radius-sm:          0.625rem;
+  --radius-lg:          1.5rem;
 
   --font-sans:          var(--font-inter), system-ui, sans-serif;
 }
@@ -52,17 +53,46 @@ body {
   background: var(--background-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  backdrop-filter: blur(12px);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(800px circle at var(--mouse-x, 50%) var(--mouse-y, -20%), rgba(255,255,255,0.03), transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+  transition: background 0.3s;
 }
 
 .card:hover {
   border-color: var(--border-hover);
-  box-shadow: 0 0 24px var(--accent-glow);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 24px var(--accent-glow);
+  transform: translateY(-2px);
 }
+.card > * { position: relative; z-index: 1; }
 
 .card-glow {
   box-shadow: 0 0 0 1px var(--border), 0 0 32px var(--accent-glow);
+}
+
+/* ── Cyberpunk Grid Background ───────────────────────────────────────────── */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  background-image: 
+    linear-gradient(to right, rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse at 50% 0%, black 40%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 0%, black 40%, transparent 80%);
+  z-index: -1;
+  pointer-events: none;
 }
 
 /* ── Gradient Text ───────────────────────────────────────────────────────── */

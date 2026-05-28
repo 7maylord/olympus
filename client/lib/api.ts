@@ -44,14 +44,14 @@ export interface ApiStats {
 }
 
 export const api = {
-  getTasks: (params?: {
+  getTasks: async (params?: {
     status?: TaskStatus;
     capabilityTag?: string;
     poster?: string;
     minBounty?: string;
     page?: number;
     limit?: number;
-  }) => {
+  }): Promise<ApiTask[]> => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
     if (params?.capabilityTag) qs.set('capabilityTag', params.capabilityTag);
@@ -59,7 +59,8 @@ export const api = {
     if (params?.minBounty) qs.set('minBounty', params.minBounty);
     if (params?.page) qs.set('page', String(params.page));
     if (params?.limit) qs.set('limit', String(params.limit));
-    return request<ApiTask[]>(`/api/tasks?${qs}`);
+    const res = await request<{ items: ApiTask[] } | ApiTask[]>(`/api/tasks?${qs}`);
+    return Array.isArray(res) ? res : res.items;
   },
 
   getTask: (id: string) => request<ApiTask>(`/api/tasks/${id}`),

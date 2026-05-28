@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ConnectButton } from './ConnectButton';
@@ -20,9 +21,10 @@ export function Navbar() {
   return (
     <header
       style={{
-        background: 'rgba(8, 11, 20, 0.85)',
-        backdropFilter: 'blur(16px)',
-        borderBottom: '1px solid var(--border)',
+        background: 'rgba(5, 8, 16, 0.6)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        borderBottom: '1px solid rgba(99, 102, 241, 0.1)',
         position: 'sticky',
         top: 0,
         zIndex: 50,
@@ -45,23 +47,27 @@ export function Navbar() {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
+            gap: '0.625rem',
             textDecoration: 'none',
           }}
+          className="group"
         >
           <div
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #6366f1, #a78bfa)',
+              width: 36,
+              height: 36,
+              borderRadius: '10px',
+              overflow: 'hidden',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 0 16px rgba(99,102,241,0.4)',
+              boxShadow: '0 0 16px rgba(99,102,241,0.25)',
+              border: '1px solid rgba(99,102,241,0.2)',
+              transition: 'all 0.3s ease',
             }}
+            className="group-hover:shadow-[0_0_24px_rgba(99,102,241,0.5)] group-hover:border-indigo-400/40"
           >
-            <Zap size={18} color="#fff" fill="#fff" />
+            <Image src="/logo.png" alt="Olympus Logo" width={36} height={36} priority />
           </div>
           <span
             style={{

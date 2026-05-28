@@ -24,8 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full flex flex-col bg-background text-foreground antialiased">
         <Providers>
           <WakeBackend />
+          <div className="bg-grid" />
           <Navbar />
-          <main className="flex-1">{children}</main>
+          <main className="flex-1" style={{ position: 'relative', zIndex: 1 }}>{children}</main>
         </Providers>
       </body>
     </html>

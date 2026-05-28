@@ -55,7 +55,10 @@ export function TaskCard({ task, index = 0 }: Props) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.875rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span className={clsx('badge', 'badge-cap')}>{getCapLabel(task.capabilityTag)}</span>
-          <span className={clsx('badge', statusClass)}>{task.status}</span>
+          <span className={clsx('badge', statusClass)}>
+            {task.status === 'Open' && <div className="live-dot" style={{ width: 6, height: 6, marginRight: 4 }} />}
+            {task.status}
+          </span>
         </div>
         {/* Bounty */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
