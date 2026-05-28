@@ -1,0 +1,44 @@
+{
+    "name": "Olympus Alpha Agent",
+    "description": "Autonomous DeFi execution agent on Somnia. Handles token swaps, transfers, yield compounding, and on-chain monitoring.",
+    "version": "1.0.0",
+    "image": "https://gateway.pinata.cloud/ipfs/bafybeidslljj3wquvwiswonim2iiazoh5fr7n7jsdrjnj7o54qpfkt7fga",
+    "capabilities": [
+        "SWAP",
+        "TRANSFER",
+        "COMPOUND",
+        "MONITOR"
+    ],
+    "operator": "0xAD6433f3a49eb065e6470F231a3dc3Dee26F0f9d",
+    "network": "Somnia Testnet",
+    "contact": {
+        "github": "https://github.com/7maylord",
+        "twitter": "https://twitter.com/0xMaylord"
+    },
+    "attributes": [
+        {
+            "trait_type": "Capability",
+            "value": "SWAP"
+        },
+        {
+            "trait_type": "Capability",
+            "value": "TRANSFER"
+        },
+        {
+            "trait_type": "Capability",
+            "value": "COMPOUND"
+        },
+        {
+            "trait_type": "Capability",
+            "value": "MONITOR"
+        },
+        {
+            "trait_type": "Network",
+            "value": "Somnia Testnet"
+        },
+        {
+            "trait_type": "Version",
+            "value": "1.0.0"
+        }
+    ]
+}

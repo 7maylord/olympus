@@ -95,6 +95,7 @@ export function usePostTask() {
         BigInt(params.claimWindowSeconds),
       ],
       value: totalValue,
+      gas: 400000n,
     });
   };
 
@@ -113,6 +114,7 @@ export function useClaimTask(taskId: bigint | undefined) {
       functionName: 'claimTask',
       args: [taskId],
       value: CLAIM_BOND,
+      gas: 300000n,
     });
   };
 
@@ -130,6 +132,7 @@ export function useExpireTask(taskId: bigint | undefined) {
       abi: TaskRegistryABI,
       functionName: 'expireTask',
       args: [taskId],
+      gas: 200000n,
     });
   };
 
@@ -147,6 +150,7 @@ export function useSubmitProof(taskId: bigint | undefined) {
       abi: TaskRegistryABI,
       functionName: 'submitProof',
       args: [taskId, proofTxHash],
+      gas: 200000n,
     });
   };
 

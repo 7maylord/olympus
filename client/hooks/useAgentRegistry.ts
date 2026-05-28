@@ -67,6 +67,7 @@ export function useRegisterAgent() {
       functionName: 'registerAgent',
       args: [params.metadataURI],
       value: stake,
+      gas: 400000n,
     });
   };
 
@@ -84,6 +85,7 @@ export function useSetCapabilities() {
       abi: AgentRegistryABI,
       functionName: 'setCapabilities',
       args: [agentId, capabilityTags],
+      gas: 200000n,
     });
   };
 

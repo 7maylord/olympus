@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useAccount } from "wagmi";
+import { useAccount, useChainId, useSwitchChain } from "wagmi";
 import {
   useRegisterAgent,
   useSetCapabilities,
@@ -31,6 +31,9 @@ const MIN_STAKE_ETH = Number(MIN_STAKE) / 1e18;
 export default function RegisterAgentPage() {
   const { authenticated, login } = usePrivy();
   const { address } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const onWrongChain = authenticated && chainId !== 50312;
   const {
     registerAgent,
     isPending,
@@ -52,11 +55,11 @@ export default function RegisterAgentPage() {
   const [metadataURI, setMetadataURI] = useState("");
   const [selectedCaps, setSelectedCaps] = useState<string[]>(["SWAP"]);
   const [stakeEth, setStakeEth] = useState(MIN_STAKE_ETH.toString());
-  const [capsTriggered, setCapsTriggered] = useState(false);
+  const capsTriggered = useRef(false);
 
   // After registerAgent confirms, refetch agentOf to get the new agentId
   useEffect(() => {
-    if (isSuccess && !capsTriggered) {
+    if (isSuccess && !capsTriggered.current) {
       agentOf.refetch();
     }
   }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -64,11 +67,11 @@ export default function RegisterAgentPage() {
   // Once agentId is available, fire setCapabilities once
   useEffect(() => {
     const agentId = agentOf.data as bigint | undefined;
-    if (isSuccess && agentId && agentId > 0n && !capsTriggered) {
-      setCapsTriggered(true);
+    if (isSuccess && agentId && agentId > 0n && !capsTriggered.current) {
+      capsTriggered.current = true;
       setCapabilities(agentId, selectedCaps);
     }
-  }, [agentOf.data, isSuccess, capsTriggered]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentOf.data, isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleCap = (cap: string) => {
     setSelectedCaps((prev) =>
@@ -440,6 +443,33 @@ export default function RegisterAgentPage() {
           ))}
         </div>
 
+        {onWrongChain && (
+          <div
+            style={{
+              padding: "0.75rem 1rem",
+              background: "rgba(245,158,11,0.1)",
+              border: "1px solid rgba(245,158,11,0.3)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.82rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "0.75rem",
+            }}
+          >
+            <span style={{ color: "var(--gold)" }}>
+              Wrong network — switch to Somnia Testnet to continue.
+            </span>
+            <button
+              className="btn-secondary"
+              style={{ flexShrink: 0, padding: "0.35rem 0.75rem", fontSize: "0.8rem" }}
+              onClick={() => switchChain({ chainId: 50312 })}
+            >
+              Switch Network
+            </button>
+          </div>
+        )}
+
         {error && (
           <div
             style={{
@@ -458,7 +488,7 @@ export default function RegisterAgentPage() {
         <button
           className="btn-primary"
           onClick={handleSubmit}
-          disabled={!valid || isPending || isConfirming}
+          disabled={!valid || isPending || isConfirming || onWrongChain}
           style={{ justifyContent: "center", padding: "0.875rem" }}
           id="submit-register-btn"
         >

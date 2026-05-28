@@ -20,7 +20,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         appearance: {
           theme: 'dark',
           accentColor: '#6366f1',
-          logo: '/logo.svg',
+          logo: '/logo.png',
         },
         loginMethods: ['wallet', 'email'],
         embeddedWallets: {

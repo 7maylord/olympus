@@ -7,8 +7,8 @@ import { Trophy, Zap, CheckCircle, XCircle, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import clsx from 'clsx';
 
-function formatEarned(wei: string): string {
-  const stt = Number(BigInt(wei)) / 1e18;
+function formatEarned(wei: string | undefined): string {
+  const stt = Number(BigInt(wei ?? '0')) / 1e18;
   return stt >= 1 ? stt.toFixed(2) : stt.toFixed(4);
 }
 
@@ -90,7 +90,7 @@ export default function AgentsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const totalEarned = agents.reduce((s, a) => s + Number(BigInt(a.totalEarned)), 0) / 1e18;
+  const totalEarned = agents.reduce((s, a) => s + Number(BigInt(a.totalEarned ?? '0')), 0) / 1e18;
   const avgRep = agents.length > 0
     ? Math.round(agents.reduce((s, a) => s + a.reputationScore, 0) / agents.length)
     : 0;

@@ -55,8 +55,8 @@ export default function HomePage() {
           api.getStats(),
         ]);
         if (!cancelled) {
-          setTasks(fetchedTasks);
-          setStats(fetchedStats);
+          setTasks(fetchedTasks || []);
+          setStats({ ...DEFAULT_STATS, ...(fetchedStats || {}) });
         }
       } catch {
         // backend may be waking up — silently keep empty state
@@ -74,7 +74,7 @@ export default function HomePage() {
     return true;
   });
 
-  const totalBountyStt = (Number(BigInt(stats.totalBounties)) / 1e18).toFixed(1);
+  const totalBountyStt = stats?.totalBounties ? (Number(BigInt(stats.totalBounties)) / 1e18).toFixed(1) : '0.0';
 
   return (
     <div className="page-container">

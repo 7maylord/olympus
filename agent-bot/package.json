@@ -1,0 +1,13 @@
+{
+  "name": "olympus-agent-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types bot.ts",
+    "dev": "node --watch --experimental-strip-types bot.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "viem": "^2.50.4"
+  }
+}
