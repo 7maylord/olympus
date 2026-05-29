@@ -5,31 +5,31 @@ import "forge-std/Test.sol";
 import "../src/AgentRegistry.sol";
 import "../src/BountyEscrow.sol";
 import "../src/TaskRegistry.sol";
-import "../src/MantleAgentsAdapter.sol";
+import "../src/SomniaAgentsAdapter.sol";
 import "../src/ExecutionVerifier.sol";
 
-/// @dev Mock Mantle compute layer — calls onAgentResponse synchronously within createTask.
+/// @dev Mock Somnia compute layer — calls onAgentResponse synchronously within createTask.
 ///      Decodes the trigger type from taskData to return appropriate values.
-contract MockMantle {
+contract MockSomnia {
     bool public priceTriggered  = true;
     bool public healthTriggered = true;
-    MantleAgentsAdapter public adapter;
+    SomniaAgentsAdapter public adapter;
     uint256 public nextId;
 
-    function setAdapter(address a)        external { adapter = MantleAgentsAdapter(a); }
+    function setAdapter(address a)        external { adapter = SomniaAgentsAdapter(a); }
     function setPrice(bool triggered)     external { priceTriggered  = triggered; }
     function setHealth(bool triggered)    external { healthTriggered = triggered; }
 
     function createTask(uint256, bytes calldata taskData) external payable returns (uint256 id) {
         id = ++nextId;
         (bytes memory trigger,) = abi.decode(taskData, (bytes, string));
-        MantleAgentsAdapter.TriggerCondition memory cond =
-            abi.decode(trigger, (MantleAgentsAdapter.TriggerCondition));
+        SomniaAgentsAdapter.TriggerCondition memory cond =
+            abi.decode(trigger, (SomniaAgentsAdapter.TriggerCondition));
 
         bytes memory result;
-        if (cond.triggerType == MantleAgentsAdapter.TriggerType.HealthFactor) {
+        if (cond.triggerType == SomniaAgentsAdapter.TriggerType.HealthFactor) {
             result = abi.encode(healthTriggered ? uint256(1.1e18) : uint256(2.0e18));
-        } else if (cond.triggerType == MantleAgentsAdapter.TriggerType.APYSpread) {
+        } else if (cond.triggerType == SomniaAgentsAdapter.TriggerType.APYSpread) {
             result = abi.encode(uint256(800), uint256(500)); // 300 BPS spread > any threshold used
         } else {
             result = abi.encode(priceTriggered ? uint256(1_900e18) : uint256(2_100e18));
@@ -43,9 +43,9 @@ contract IntegrationTest is Test {
     AgentRegistry       agentReg;
     BountyEscrow        escrow;
     TaskRegistry        taskReg;
-    MantleAgentsAdapter adapter;
+    SomniaAgentsAdapter adapter;
     ExecutionVerifier   verifier;
-    MockMantle          mockMantle;
+    MockSomnia          mockSomnia;
 
     address treasury = makeAddr("treasury");
 
@@ -64,17 +64,17 @@ contract IntegrationTest is Test {
     bytes32 constant TAG_TRANSFER  = keccak256("RECURRING_TRANSFER");
 
     function setUp() public {
-        mockMantle = new MockMantle();
+        mockSomnia = new MockSomnia();
         agentReg   = new AgentRegistry(treasury);
         escrow     = new BountyEscrow(treasury);
-        adapter    = new MantleAgentsAdapter(address(mockMantle), "https://api.price-feed.xyz/v1/");
+        adapter    = new SomniaAgentsAdapter(address(mockSomnia), "https://api.price-feed.xyz/v1/");
         taskReg    = new TaskRegistry(address(agentReg), address(escrow), treasury);
         verifier   = new ExecutionVerifier(address(taskReg), address(agentReg), address(adapter));
 
         agentReg.setVerifier(address(taskReg));
         escrow.setTaskRegistry(address(taskReg));
         taskReg.setExecutionVerifier(address(verifier));
-        mockMantle.setAdapter(address(adapter));
+        mockSomnia.setAdapter(address(adapter));
 
         // Fund and register 10 agents
         for (uint256 i = 0; i < 10; i++) {
@@ -132,7 +132,7 @@ contract IntegrationTest is Test {
     // ─── Task type: Conditional Swap ─────────────────────────────────────────
 
     function test_task_type_conditional_swap_full_lifecycle() public {
-        mockMantle.setPrice(true);
+        mockSomnia.setPrice(true);
         bytes memory trigger = _priceTrigger();
         uint256 taskId = _post(TAG_SWAP, trigger);
 
@@ -145,7 +145,7 @@ contract IntegrationTest is Test {
     }
 
     function test_task_type_conditional_swap_trigger_not_met_reverts() public {
-        mockMantle.setPrice(false); // price > threshold → not triggered
+        mockSomnia.setPrice(false); // price > threshold → not triggered
         bytes memory trigger = _priceTrigger();
         uint256 taskId = _post(TAG_SWAP, trigger);
         _claim(agents[0], taskId);
@@ -159,7 +159,7 @@ contract IntegrationTest is Test {
     // ─── Task type: Collateral Guard ─────────────────────────────────────────
 
     function test_task_type_collateral_guard_full_lifecycle() public {
-        mockMantle.setHealth(true); // HF = 1.1 < 1.3 → triggered
+        mockSomnia.setHealth(true); // HF = 1.1 < 1.3 → triggered
         bytes memory trigger = _healthTrigger();
         uint256 taskId = _post(TAG_GUARD, trigger);
 
@@ -287,7 +287,7 @@ contract IntegrationTest is Test {
         // Pre-compute trigger bytes before vm.prank — _priceTrigger() calls an external
         // contract (adapter), which would otherwise consume the prank before postTask.
         bytes memory trigger = _priceTrigger();
-        mockMantle.setPrice(true);
+        mockSomnia.setPrice(true);
         vm.prank(poster);
         uint256 taskId = taskReg.postTask{value: TOTAL_VALUE}(
             TAG_SWAP, trigger, "", 0, block.timestamp + 1 days, 60
@@ -299,7 +299,7 @@ contract IntegrationTest is Test {
         taskReg.submitProof(taskId, bytes32("bad_proof"));
 
         // Price recovered — update cache before disputing
-        mockMantle.setPrice(false);
+        mockSomnia.setPrice(false);
         _primeOracle(trigger);
         uint256 posterBefore = poster.balance;
 
@@ -320,7 +320,7 @@ contract IntegrationTest is Test {
         vm.deal(poster, 10 ether);
 
         bytes memory trigger = _priceTrigger();
-        mockMantle.setPrice(true);
+        mockSomnia.setPrice(true);
         vm.prank(poster);
         uint256 taskId = taskReg.postTask{value: TOTAL_VALUE}(
             TAG_SWAP, trigger, "", 0, block.timestamp + 1 days, 60

@@ -2,16 +2,16 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/MantleAgentsAdapter.sol";
+import "../src/SomniaAgentsAdapter.sol";
 
-/// @dev Mock IMantleAgents — calls onAgentResponse synchronously within createTask
+/// @dev Mock ISomniaAgents — calls onAgentResponse synchronously within createTask
 ///      so tests stay single-transaction. Keyed by keccak256(trigger bytes).
-contract MockMantleAgents {
-    MantleAgentsAdapter public adapter;
+contract MockSomniaAgents {
+    SomniaAgentsAdapter public adapter;
     mapping(bytes32 => bytes) private _results; // keccak256(trigger) => encoded result
     uint256 public nextId;
 
-    function setAdapter(address a) external { adapter = MantleAgentsAdapter(a); }
+    function setAdapter(address a) external { adapter = SomniaAgentsAdapter(a); }
 
     /// @dev taskData = abi.encode(trigger, priceFeedBase) as encoded by requestOracleUpdate.
     function setResult(bytes calldata trigger, bytes calldata result) external {
@@ -25,9 +25,9 @@ contract MockMantleAgents {
     }
 }
 
-contract MantleAgentsAdapterTest is Test {
-    MantleAgentsAdapter adapter;
-    MockMantleAgents    mock;
+contract SomniaAgentsAdapterTest is Test {
+    SomniaAgentsAdapter adapter;
+    MockSomniaAgents    mock;
 
     address constant TOKEN    = address(0xBEEF);
     address constant PROTOCOL = address(0xCAFE);
@@ -38,8 +38,8 @@ contract MantleAgentsAdapterTest is Test {
     string constant POOL_B     = "pool-b-id";
 
     function setUp() public {
-        mock    = new MockMantleAgents();
-        adapter = new MantleAgentsAdapter(address(mock), PRICE_BASE);
+        mock    = new MockSomniaAgents();
+        adapter = new SomniaAgentsAdapter(address(mock), PRICE_BASE);
         mock.setAdapter(address(adapter));
     }
 
@@ -105,7 +105,7 @@ contract MantleAgentsAdapterTest is Test {
 
     function test_price_trigger_reverts_zero_address_token() public {
         bytes memory trigger = adapter.encodePriceTrigger(address(0), 2_000e18, true);
-        vm.expectRevert(MantleAgentsAdapter.InvalidParams.selector);
+        vm.expectRevert(SomniaAgentsAdapter.InvalidParams.selector);
         adapter.requestOracleUpdate(trigger);
     }
 
@@ -129,7 +129,7 @@ contract MantleAgentsAdapterTest is Test {
 
     function test_health_factor_reverts_zero_address() public {
         bytes memory trigger = adapter.encodeHealthFactorTrigger(address(0), USER, 1.3e18);
-        vm.expectRevert(MantleAgentsAdapter.InvalidParams.selector);
+        vm.expectRevert(SomniaAgentsAdapter.InvalidParams.selector);
         adapter.requestOracleUpdate(trigger);
     }
 
@@ -188,7 +188,7 @@ contract MantleAgentsAdapterTest is Test {
 
     function test_block_interval_reverts_zero_interval() public {
         bytes memory t = adapter.encodeBlockIntervalTrigger(0, 0);
-        vm.expectRevert(MantleAgentsAdapter.InvalidParams.selector);
+        vm.expectRevert(SomniaAgentsAdapter.InvalidParams.selector);
         adapter.requestOracleUpdate(t);
     }
 
@@ -196,14 +196,14 @@ contract MantleAgentsAdapterTest is Test {
 
     function test_evaluate_reverts_when_no_cache() public {
         bytes memory t = adapter.encodePriceTrigger(TOKEN, 2_000e18, true);
-        vm.expectRevert(MantleAgentsAdapter.OracleResultStale.selector);
+        vm.expectRevert(SomniaAgentsAdapter.OracleResultStale.selector);
         adapter.evaluate(t);
     }
 
     function test_evaluate_reverts_when_cache_expired() public {
         bytes memory t = _primePrice(TOKEN, 2_000e18, true, 1_900e18);
         vm.roll(block.number + adapter.CACHE_VALID_BLOCKS() + 1);
-        vm.expectRevert(MantleAgentsAdapter.OracleResultStale.selector);
+        vm.expectRevert(SomniaAgentsAdapter.OracleResultStale.selector);
         adapter.evaluate(t);
     }
 
@@ -217,9 +217,9 @@ contract MantleAgentsAdapterTest is Test {
 
     function test_encode_decode_price_trigger_roundtrip() public view {
         bytes memory encoded = adapter.encodePriceTrigger(TOKEN, 2_000e18, true);
-        MantleAgentsAdapter.TriggerCondition memory cond =
-            abi.decode(encoded, (MantleAgentsAdapter.TriggerCondition));
-        assertEq(uint8(cond.triggerType), uint8(MantleAgentsAdapter.TriggerType.PriceBelow));
+        SomniaAgentsAdapter.TriggerCondition memory cond =
+            abi.decode(encoded, (SomniaAgentsAdapter.TriggerCondition));
+        assertEq(uint8(cond.triggerType), uint8(SomniaAgentsAdapter.TriggerType.PriceBelow));
         (address tok, uint256 thresh) = abi.decode(cond.params, (address, uint256));
         assertEq(tok,    TOKEN);
         assertEq(thresh, 2_000e18);
@@ -227,9 +227,9 @@ contract MantleAgentsAdapterTest is Test {
 
     function test_encode_decode_health_factor_roundtrip() public view {
         bytes memory encoded = adapter.encodeHealthFactorTrigger(PROTOCOL, USER, 1.3e18);
-        MantleAgentsAdapter.TriggerCondition memory cond =
-            abi.decode(encoded, (MantleAgentsAdapter.TriggerCondition));
-        assertEq(uint8(cond.triggerType), uint8(MantleAgentsAdapter.TriggerType.HealthFactor));
+        SomniaAgentsAdapter.TriggerCondition memory cond =
+            abi.decode(encoded, (SomniaAgentsAdapter.TriggerCondition));
+        assertEq(uint8(cond.triggerType), uint8(SomniaAgentsAdapter.TriggerType.HealthFactor));
         (address p, address u, uint256 minHF) = abi.decode(cond.params, (address, address, uint256));
         assertEq(p,    PROTOCOL);
         assertEq(u,    USER);
@@ -238,9 +238,9 @@ contract MantleAgentsAdapterTest is Test {
 
     function test_encode_decode_block_interval_roundtrip() public view {
         bytes memory encoded = adapter.encodeBlockIntervalTrigger(500, 200);
-        MantleAgentsAdapter.TriggerCondition memory cond =
-            abi.decode(encoded, (MantleAgentsAdapter.TriggerCondition));
-        assertEq(uint8(cond.triggerType), uint8(MantleAgentsAdapter.TriggerType.BlockInterval));
+        SomniaAgentsAdapter.TriggerCondition memory cond =
+            abi.decode(encoded, (SomniaAgentsAdapter.TriggerCondition));
+        assertEq(uint8(cond.triggerType), uint8(SomniaAgentsAdapter.TriggerType.BlockInterval));
         (uint256 anchor, uint256 interval) = abi.decode(cond.params, (uint256, uint256));
         assertEq(anchor,   500);
         assertEq(interval, 200);

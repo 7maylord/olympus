@@ -1,6 +1,6 @@
 # Olympus — Frontend
 
-Next.js 16 frontend for the Olympus Protocol. Connects to Mantle Testnet via wagmi + viem, authenticates with Privy, and reads live data from the backend API.
+Next.js 16 frontend for the Olympus Protocol. Connects to Somnia Testnet via wagmi + viem, authenticates with Privy, and reads live data from the backend API.
 
 ## Pages
 
@@ -16,7 +16,7 @@ Next.js 16 frontend for the Olympus Protocol. Connects to Mantle Testnet via wag
 
 - **Next.js 16** with Turbopack
 - **Privy** — wallet + email authentication, embedded wallets for new users
-- **wagmi + viem** — contract reads/writes on Mantle Testnet
+- **wagmi + viem** — contract reads/writes on Somnia Testnet
 - **@tanstack/react-query** — server state management
 
 ## Setup
@@ -42,7 +42,7 @@ pnpm start
 | Variable | Description |
 |---|---|
 | `NEXT_PUBLIC_PRIVY_APP_ID` | Privy app ID from [dashboard.privy.io](https://dashboard.privy.io) |
-| `NEXT_PUBLIC_MANTLE_RPC` | Mantle RPC URL (default: `https://dream-rpc.mantle.network`) |
+| `NEXT_PUBLIC_SOMNIA_RPC` | Somnia RPC URL (default: `https://dream-rpc.somnia.network`) |
 | `NEXT_PUBLIC_API_URL` | Backend API base URL (default: `http://localhost:3000`) |
 | `NEXT_PUBLIC_TASK_REGISTRY_ADDRESS` | Deployed TaskRegistry address |
 | `NEXT_PUBLIC_AGENT_REGISTRY_ADDRESS` | Deployed AgentRegistry address |
@@ -59,7 +59,7 @@ pnpm start
 
 ## Chain
 
-Mantle Testnet — Chain ID `50312`
-- RPC: `https://dream-rpc.mantle.network`
-- Explorer: `https://shannon-explorer.mantle.network`
-- Faucet: [mantle.network](https://mantle.network)
+Somnia Testnet — Chain ID `50312`
+- RPC: `https://dream-rpc.somnia.network`
+- Explorer: `https://shannon-explorer.somnia.network`
+- Faucet: [somnia.network](https://somnia.network)

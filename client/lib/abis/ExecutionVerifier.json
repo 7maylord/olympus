@@ -13,7 +13,7 @@
       },
       {
         "internalType": "address",
-        "name": "_mantleAdapter",
+        "name": "_somniaAdapter",
         "type": "address"
       }
     ],
@@ -375,10 +375,10 @@
   },
   {
     "inputs": [],
-    "name": "mantleAdapter",
+    "name": "somniaAdapter",
     "outputs": [
       {
-        "internalType": "contract MantleAgentsAdapter",
+        "internalType": "contract SomniaAgentsAdapter",
         "name": "",
         "type": "address"
       }

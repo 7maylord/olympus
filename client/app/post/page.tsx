@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useChainId, useSwitchChain } from 'wagmi';
 import { ArrowRight, ArrowLeft, CheckCircle, Loader2, ExternalLink, Info } from 'lucide-react';
 import Link from 'next/link';
 import { usePostTask, type PostTaskParams } from '../../hooks/useTaskRegistry';
@@ -285,13 +286,13 @@ function StepBounty({
 
 function StepReview({
   triggerType, triggerParams, capability, bounty, expiry, minRep, claimWindow,
-  onBack, onSubmit, isPending, isConfirming, isSuccess, txHash, error,
+  onBack, onSubmit, isPending, isConfirming, isSuccess, txHash, error, disabled,
 }: {
   triggerType: string; triggerParams: Record<string, string>;
   capability: string; bounty: string; expiry: string; minRep: number; claimWindow: number;
   onBack: () => void; onSubmit: () => void;
   isPending: boolean; isConfirming: boolean; isSuccess: boolean;
-  txHash?: `0x${string}`; error: Error | null;
+  txHash?: `0x${string}`; error: Error | null; disabled?: boolean;
 }) {
   if (isSuccess) {
     return (
@@ -305,7 +306,7 @@ function StepReview({
         </p>
         {txHash && (
           <a
-            href={`https://shannon-explorer.mantle.network/tx/${txHash}`}
+            href={`https://shannon-explorer.somnia.network/tx/${txHash}`}
             target="_blank" rel="noopener noreferrer"
             className="btn-secondary"
           >
@@ -349,6 +350,15 @@ function StepReview({
         </div>
       </div>
 
+      {txHash && !isSuccess && (
+        <div style={{ padding: '0.75rem 1rem', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 'var(--radius-sm)', marginBottom: '1rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ color: 'var(--foreground-muted)' }}>Tx submitted — waiting for confirmation…</span>
+          <a href={`https://shannon-explorer.somnia.network/tx/${txHash}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <ExternalLink size={12} /> View
+          </a>
+        </div>
+      )}
+
       {error && (
         <div style={{ padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-sm)', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--red)' }}>
           {error.message}
@@ -362,12 +372,12 @@ function StepReview({
         <button
           className="btn-primary"
           onClick={onSubmit}
-          disabled={isPending || isConfirming}
+          disabled={isPending || isConfirming || disabled}
           style={{ flex: 1, justifyContent: 'center' }}
         >
           {isPending ? <><Loader2 size={15} className="animate-spin" /> Confirm in wallet…</> :
            isConfirming ? <><Loader2 size={15} className="animate-spin" /> Confirming…</> :
-           <>Post Task on Mantle <ArrowRight size={15} /></>}
+           <>Post Task on Somnia <ArrowRight size={15} /></>}
         </button>
       </div>
     </div>
@@ -378,6 +388,9 @@ function StepReview({
 
 export default function PostTaskPage() {
   const { authenticated, login } = usePrivy();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const onWrongChain = authenticated && chainId !== 50312;
   const [step, setStep] = useState(0);
 
   // Trigger state
@@ -431,6 +444,15 @@ export default function PostTaskPage() {
         </h1>
       </div>
 
+      {onWrongChain && (
+        <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+          <span style={{ color: 'var(--gold)' }}>Wrong network — switch to Somnia Testnet to post tasks.</span>
+          <button className="btn-secondary" style={{ flexShrink: 0, padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={() => switchChain({ chainId: 50312 })}>
+            Switch Network
+          </button>
+        </div>
+      )}
+
       <div className="card card-glow" style={{ padding: '2rem', position: 'relative', overflow: 'hidden' }}>
         {/* Glow overlay */}
         <div style={{ position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%', background: 'radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08), transparent 50%)', pointerEvents: 'none' }} />
@@ -466,7 +488,7 @@ export default function PostTaskPage() {
             onBack={() => { setStep(1); reset(); }}
             onSubmit={handleSubmit}
             isPending={isPending} isConfirming={isConfirming} isSuccess={isSuccess}
-            txHash={hash} error={error}
+            txHash={hash} error={error} disabled={onWrongChain}
           />
         )}
         </div>

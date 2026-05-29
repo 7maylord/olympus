@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 import "../src/AgentRegistry.sol";
 import "../src/BountyEscrow.sol";
 import "../src/TaskRegistry.sol";
-import "../src/MantleAgentsAdapter.sol";
+import "../src/SomniaAgentsAdapter.sol";
 import "../src/ExecutionVerifier.sol";
 
 contract Deploy is Script {
@@ -15,7 +15,7 @@ contract Deploy is Script {
 
         address treasury = vm.envOr("TREASURY_ADDRESS", deployer);
 
-        address mantleAgents = vm.envOr("MANTLE_AGENTS_ADDRESS", address(0));
+        address somniaAgents = vm.envOr("SOMNIA_AGENTS_ADDRESS", address(0));
 
         string memory priceBase = vm.envOr(
             "PRICE_FEED_BASE_URL",
@@ -36,8 +36,8 @@ contract Deploy is Script {
         BountyEscrow bountyEscrow = new BountyEscrow(treasury);
         console2.log("BountyEscrow         :", address(bountyEscrow));
 
-        MantleAgentsAdapter mantleAdapter = new MantleAgentsAdapter(mantleAgents, priceBase);
-        console2.log("MantleAgentsAdapter  :", address(mantleAdapter));
+        SomniaAgentsAdapter somniaAdapter = new SomniaAgentsAdapter(somniaAgents, priceBase);
+        console2.log("SomniaAgentsAdapter  :", address(somniaAdapter));
 
         TaskRegistry taskRegistry = new TaskRegistry(
             address(agentRegistry),
@@ -49,7 +49,7 @@ contract Deploy is Script {
         ExecutionVerifier executionVerifier = new ExecutionVerifier(
             address(taskRegistry),
             address(agentRegistry),
-            address(mantleAdapter)
+            address(somniaAdapter)
         );
         console2.log("ExecutionVerifier    :", address(executionVerifier));
 
@@ -79,6 +79,6 @@ contract Deploy is Script {
         console2.log("AGENT_REGISTRY_ADDRESS=",     address(agentRegistry));
         console2.log("BOUNTY_ESCROW_ADDRESS=",      address(bountyEscrow));
         console2.log("EXECUTION_VERIFIER_ADDRESS=", address(executionVerifier));
-        console2.log("MANTLE_AGENTS_ADAPTER_ADDRESS=", address(mantleAdapter));
+        console2.log("SOMNIA_AGENTS_ADAPTER_ADDRESS=", address(somniaAdapter));
     }
 }

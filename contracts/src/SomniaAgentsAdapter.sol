@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IMantleAgents {
+interface ISomniaAgents {
     function createTask(uint256 agentId, bytes calldata taskData)
         external payable returns (uint256 taskId);
 }
 
-contract MantleAgentsAdapter {
+contract SomniaAgentsAdapter {
 
     enum TriggerType {
         PriceBelow,
@@ -28,7 +28,7 @@ contract MantleAgentsAdapter {
 
     uint256 public constant CACHE_VALID_BLOCKS = 150;
 
-    IMantleAgents public immutable mantleAgents;
+    ISomniaAgents public immutable somniaAgents;
     string        public priceFeedBase;
     address       public immutable owner;
     uint256       public oracleAgentId;
@@ -36,17 +36,17 @@ contract MantleAgentsAdapter {
     mapping(bytes32 => CachedResult) internal _cache;
 
     error OracleResultStale();
-    error NotMantleAgents();
+    error NotSomniaAgents();
     error Unauthorized();
     error UnsupportedTriggerType();
     error InvalidParams();
 
-    event OracleUpdateRequested(bytes32 indexed triggerHash, uint256 mantleTaskId);
+    event OracleUpdateRequested(bytes32 indexed triggerHash, uint256 somniaTaskId);
     event OracleResultCached(bytes32 indexed triggerHash, bool triggered);
 
-    constructor(address _mantleAgents, string memory _priceFeedBase) {
+    constructor(address _somniaAgents, string memory _priceFeedBase) {
         owner        = msg.sender;
-        mantleAgents = IMantleAgents(_mantleAgents);
+        somniaAgents = ISomniaAgents(_somniaAgents);
         priceFeedBase = _priceFeedBase;
     }
 
@@ -55,7 +55,7 @@ contract MantleAgentsAdapter {
         oracleAgentId = id;
     }
 
-    function requestOracleUpdate(bytes calldata trigger) external returns (uint256 mantleTaskId) {
+    function requestOracleUpdate(bytes calldata trigger) external returns (uint256 somniaTaskId) {
         TriggerCondition memory cond = abi.decode(trigger, (TriggerCondition));
         bytes32 h = keccak256(trigger);
 
@@ -76,19 +76,19 @@ contract MantleAgentsAdapter {
             if (protocol == address(0) || user == address(0)) revert InvalidParams();
         }
 
-        if (address(mantleAgents) == address(0)) {
+        if (address(somniaAgents) == address(0)) {
             _cache[h] = CachedResult(true, block.number);
             emit OracleResultCached(h, true);
             return 0;
         }
 
         bytes memory taskData = abi.encode(trigger, priceFeedBase);
-        mantleTaskId = mantleAgents.createTask(oracleAgentId, taskData);
-        emit OracleUpdateRequested(h, mantleTaskId);
+        somniaTaskId = somniaAgents.createTask(oracleAgentId, taskData);
+        emit OracleUpdateRequested(h, somniaTaskId);
     }
 
     function onAgentResponse(uint256, bytes calldata originalTaskData, bytes calldata result) external {
-        if (msg.sender != address(mantleAgents)) revert NotMantleAgents();
+        if (msg.sender != address(somniaAgents)) revert NotSomniaAgents();
 
         (bytes memory trigger,) = abi.decode(originalTaskData, (bytes, string));
         TriggerCondition memory cond = abi.decode(trigger, (TriggerCondition));

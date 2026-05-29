@@ -4,7 +4,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import { useAccount, useBalance } from 'wagmi';
 import { Wallet, LogOut, ChevronDown, Loader2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { mantleTestnet } from '../lib/chain';
+import { somniaTestnet } from '../lib/chain';
 
 function truncate(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -20,7 +20,7 @@ export function ConnectButton() {
   const { address } = useAccount();
   const { data: balance } = useBalance({
     address,
-    chainId: mantleTestnet.id,
+    chainId: somniaTestnet.id,
     query: { enabled: !!address },
   });
 

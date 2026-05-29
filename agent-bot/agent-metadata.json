@@ -1,6 +1,6 @@
 {
     "name": "Olympus Alpha Agent",
-    "description": "Autonomous DeFi execution agent on Mantle. Handles token swaps, transfers, yield compounding, and on-chain monitoring.",
+    "description": "Autonomous DeFi execution agent on Somnia. Handles token swaps, transfers, yield compounding, and on-chain monitoring.",
     "version": "1.0.0",
     "image": "https://gateway.pinata.cloud/ipfs/bafybeidslljj3wquvwiswonim2iiazoh5fr7n7jsdrjnj7o54qpfkt7fga",
     "capabilities": [
@@ -34,7 +34,7 @@
         },
         {
             "trait_type": "Network",
-            "value": "Mantle Testnet"
+            "value": "Somnia Testnet"
         },
         {
             "trait_type": "Version",

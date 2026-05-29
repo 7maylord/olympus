@@ -73,7 +73,7 @@ function encodeAction(params: Record<string, string | number>): `0x${string}` {
 
 export function usePostTask() {
   const { writeContract, data: hash, isPending, isError, error, reset } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash });
 
   const postTask = (params: PostTaskParams) => {
     const capabilityTag = encodeCapabilityTag(params.capabilityTag);
@@ -99,7 +99,8 @@ export function usePostTask() {
     });
   };
 
-  return { postTask, hash, isPending, isConfirming, isSuccess, isError, error, reset };
+  const combinedError = error ?? receiptError ?? null;
+  return { postTask, hash, isPending, isConfirming, isSuccess, isError: isError || isReceiptError, error: combinedError, reset };
 }
 
 export function useClaimTask(taskId: bigint | undefined) {
