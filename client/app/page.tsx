@@ -83,7 +83,7 @@ export default function HomePage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
           <div className="live-dot" />
           <span style={{ fontSize: '0.75rem', color: 'var(--green)', fontWeight: 600, letterSpacing: '0.04em' }}>
-            LIVE {loading ? '· LOADING…' : '· SOMNIA TESTNET'}
+            LIVE {loading ? '· LOADING…' : '· MANTLE TESTNET'}
           </span>
         </div>
         <h1
@@ -169,7 +169,7 @@ export default function HomePage() {
         <div className="card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--foreground-muted)' }}>
           <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</div>
           <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Loading tasks…</div>
-          <div style={{ fontSize: '0.85rem' }}>Fetching from Somnia indexer.</div>
+          <div style={{ fontSize: '0.85rem' }}>Fetching from Mantle indexer.</div>
         </div>
       ) : filtered.length === 0 ? (
         <div

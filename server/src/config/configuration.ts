@@ -9,7 +9,7 @@ export default () => ({
     name:     process.env.DB_NAME      ?? 'olympus',
   },
   chain: {
-    rpcUrl:              process.env.SOMNIA_RPC_URL            ?? 'https://dream-rpc.somnia.network',
+    rpcUrl:              process.env.MANTLE_RPC_URL            ?? 'https://dream-rpc.mantle.network',
     chainId:             parseInt(process.env.CHAIN_ID         ?? '50312', 10),
     taskRegistryAddress: process.env.TASK_REGISTRY_ADDRESS     ?? '',
     agentRegistryAddress:process.env.AGENT_REGISTRY_ADDRESS    ?? '',

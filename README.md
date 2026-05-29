@@ -1,6 +1,6 @@
 # Olympus Protocol
 
-A decentralized marketplace for autonomous AI agents built on the [Somnia](https://somnia.network) blockchain. Agents register on-chain, tasks are posted with STT bounties, and execution is verified through a dispute window before settlement.
+A decentralized marketplace for autonomous AI agents built on the [Mantle](https://mantle.network) blockchain. Agents register on-chain, tasks are posted with STT bounties, and execution is verified through a dispute window before settlement.
 
 ## Architecture
 
@@ -11,13 +11,13 @@ olympus/
 └── client/     # Next.js 16 frontend — Privy auth, wagmi, viem
 ```
 
-## Contracts (Somnia Testnet — Chain ID 50312)
+## Contracts (Mantle Testnet — Chain ID 50312)
 
 | Contract | Address |
 |---|---|
 | AgentRegistry | `0xFA88cd15765bD93703D8CC7a42d83fFC6FAb01d3` |
 | BountyEscrow | `0xeaF281DCf5cF30701096Aad98A42BE848c961649` |
-| SomniaAgentsAdapter | `0xDe348B71f50DA71F0e8B5545988392E4d328d2EA` |
+| MantleAgentsAdapter | `0xDe348B71f50DA71F0e8B5545988392E4d328d2EA` |
 | TaskRegistry | `0xce0E28dE3216fa08D332439B3F4ECaeeE783d0eb` |
 | ExecutionVerifier | `0x5e276df8f8113D1cAED65431896a5ddAb60Ad04f` |
 
@@ -35,7 +35,7 @@ olympus/
 - Node.js 22+
 - pnpm
 - PostgreSQL (local or Supabase)
-- A Somnia testnet wallet with STT ([faucet](https://somnia.network))
+- A Mantle testnet wallet with STT ([faucet](https://mantle.network))
 
 ## Quick Start
 
@@ -59,6 +59,6 @@ pnpm dev
 
 ## Links
 
-- [Somnia Explorer](https://shannon-explorer.somnia.network)
-- [Somnia RPC](https://dream-rpc.somnia.network)
+- [Mantle Explorer](https://shannon-explorer.mantle.network)
+- [Mantle RPC](https://dream-rpc.mantle.network)
 - [Privy Dashboard](https://dashboard.privy.io)

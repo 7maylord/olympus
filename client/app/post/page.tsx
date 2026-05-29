@@ -305,7 +305,7 @@ function StepReview({
         </p>
         {txHash && (
           <a
-            href={`https://shannon-explorer.somnia.network/tx/${txHash}`}
+            href={`https://shannon-explorer.mantle.network/tx/${txHash}`}
             target="_blank" rel="noopener noreferrer"
             className="btn-secondary"
           >
@@ -367,7 +367,7 @@ function StepReview({
         >
           {isPending ? <><Loader2 size={15} className="animate-spin" /> Confirm in wallet…</> :
            isConfirming ? <><Loader2 size={15} className="animate-spin" /> Confirming…</> :
-           <>Post Task on Somnia <ArrowRight size={15} /></>}
+           <>Post Task on Mantle <ArrowRight size={15} /></>}
         </button>
       </div>
     </div>

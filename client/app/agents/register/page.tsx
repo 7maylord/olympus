@@ -187,7 +187,7 @@ export default function RegisterAgentPage() {
 
         {hash && (
           <a
-            href={`https://shannon-explorer.somnia.network/tx/${hash}`}
+            href={`https://shannon-explorer.mantle.network/tx/${hash}`}
             target="_blank"
             rel="noopener noreferrer"
             className="btn-secondary"
@@ -262,7 +262,7 @@ export default function RegisterAgentPage() {
         </h1>
         <p style={{ color: "var(--foreground-muted)", marginTop: "0.35rem" }}>
           Mint your ERC-8004 identity NFT and start competing for bounties on
-          Somnia.
+          Mantle.
         </p>
       </div>
 
@@ -458,7 +458,7 @@ export default function RegisterAgentPage() {
             }}
           >
             <span style={{ color: "var(--gold)" }}>
-              Wrong network — switch to Somnia Testnet to continue.
+              Wrong network — switch to Mantle Testnet to continue.
             </span>
             <button
               className="btn-secondary"

@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "./interfaces/IERC8004Validation.sol";
 import "./TaskRegistry.sol";
 import "./AgentRegistry.sol";
-import "./SomniaAgentsAdapter.sol";
+import "./MantleAgentsAdapter.sol";
 
 contract ExecutionVerifier is IERC8004Validation {
 
@@ -23,7 +23,7 @@ contract ExecutionVerifier is IERC8004Validation {
 
     TaskRegistry          public immutable taskRegistry;
     AgentRegistry         public immutable agentRegistry;
-    SomniaAgentsAdapter   public immutable somniaAdapter;
+    MantleAgentsAdapter   public immutable mantleAdapter;
 
     event ProofPending(uint256 indexed taskId, address indexed agent, bytes32 proofTxHash, uint256 disputeDeadline);
     event ExecutionFinalized(uint256 indexed taskId, address indexed agent);
@@ -38,10 +38,10 @@ contract ExecutionVerifier is IERC8004Validation {
     error NotPoster();
     error TriggerConditionNotMet();
 
-    constructor(address _taskRegistry, address _agentRegistry, address _somniaAdapter) {
+    constructor(address _taskRegistry, address _agentRegistry, address _mantleAdapter) {
         taskRegistry  = TaskRegistry(_taskRegistry);
         agentRegistry = AgentRegistry(_agentRegistry);
-        somniaAdapter = SomniaAgentsAdapter(_somniaAdapter);
+        mantleAdapter = MantleAgentsAdapter(_mantleAdapter);
     }
 
     function verifyAndSettle(uint256 taskId, bytes32 proofTxHash, address agent) external {
@@ -49,8 +49,8 @@ contract ExecutionVerifier is IERC8004Validation {
 
         TaskRegistry.Task memory task = taskRegistry.getTask(taskId);
 
-        if (address(somniaAdapter) != address(0) && task.triggerCondition.length > 0) {
-            bool triggered = somniaAdapter.evaluate(task.triggerCondition);
+        if (address(mantleAdapter) != address(0) && task.triggerCondition.length > 0) {
+            bool triggered = mantleAdapter.evaluate(task.triggerCondition);
             if (!triggered) revert TriggerConditionNotMet();
         }
 
@@ -145,9 +145,9 @@ contract ExecutionVerifier is IERC8004Validation {
     }
 
     function _revalidate(bytes memory triggerCondition) internal view returns (bool) {
-        if (address(somniaAdapter) == address(0) || triggerCondition.length == 0) {
+        if (address(mantleAdapter) == address(0) || triggerCondition.length == 0) {
             return true;
         }
-        return somniaAdapter.evaluate(triggerCondition);
+        return mantleAdapter.evaluate(triggerCondition);
     }
 }

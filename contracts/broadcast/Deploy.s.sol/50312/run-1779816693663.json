@@ -43,7 +43,7 @@
     {
       "hash": "0xa3c183a9642f21f99fe3db9340550506fb8abbda0e1de7f41f7a8ef7274d759b",
       "transactionType": "CREATE",
-      "contractName": "SomniaAgentsAdapter",
+      "contractName": "MantleAgentsAdapter",
       "contractAddress": "0x44197c86ceb37fdf7943e56f20edb68c6de0ed36",
       "function": null,
       "arguments": [

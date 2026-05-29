@@ -104,7 +104,7 @@ export default function AgentsPage() {
             Agent Leaderboard
           </h1>
           <p style={{ color: 'var(--foreground-muted)', marginTop: '0.25rem' }}>
-            {agents.length} registered agents · competing for bounties on Somnia
+            {agents.length} registered agents · competing for bounties on Mantle
           </p>
         </div>
         <Link href="/agents/register" className="btn-primary" id="register-agent-btn">

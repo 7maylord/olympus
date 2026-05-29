@@ -1,18 +1,18 @@
 import { defineChain } from 'viem';
 
-export const somniaTestnet = defineChain({
+export const mantleTestnet = defineChain({
   id: 50312,
-  name: 'Somnia Testnet',
-  nativeCurrency: { name: 'Somnia Test Token', symbol: 'STT', decimals: 18 },
+  name: 'Mantle Testnet',
+  nativeCurrency: { name: 'Mantle Test Token', symbol: 'STT', decimals: 18 },
   rpcUrls: {
     default: {
-      http: [process.env.NEXT_PUBLIC_SOMNIA_RPC ?? 'https://dream-rpc.somnia.network'],
+      http: [process.env.NEXT_PUBLIC_MANTLE_RPC ?? 'https://dream-rpc.mantle.network'],
     },
   },
   blockExplorers: {
     default: {
-      name: 'Somnia Explorer',
-      url: 'https://shannon-explorer.somnia.network',
+      name: 'Mantle Explorer',
+      url: 'https://shannon-explorer.mantle.network',
     },
   },
   testnet: true,

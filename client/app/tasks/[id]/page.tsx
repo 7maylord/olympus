@@ -672,7 +672,7 @@ export default function TaskDetailPage() {
               {/* Proof explorer link */}
               {task.proofHash && (
                 <a
-                  href={`https://shannon-explorer.somnia.network/tx/${task.proofHash}`}
+                  href={`https://shannon-explorer.mantle.network/tx/${task.proofHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-secondary"

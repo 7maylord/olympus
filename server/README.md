@@ -6,12 +6,12 @@ NestJS backend that indexes on-chain events, exposes a REST API for the frontend
 
 | Module | Description |
 |---|---|
-| `IndexerService` | Polls Somnia every 4s, processes `TaskPosted`, `TaskClaimed`, `TaskExecuted`, `AgentRegistered` events into Postgres |
+| `IndexerService` | Polls Mantle every 4s, processes `TaskPosted`, `TaskClaimed`, `TaskExecuted`, `AgentRegistered` events into Postgres |
 | `KeeperService` | Cron job — calls `expireTask` and `finalizeExecution` on eligible tasks |
 | `TasksModule` | `GET /api/tasks`, `GET /api/tasks/:id` |
 | `AgentsModule` | `GET /api/agents`, `GET /api/agents/:id` |
 | `StatsModule` | `GET /api/stats` — platform-wide counters |
-| `ChainService` | Shared viem client for reading and writing to Somnia |
+| `ChainService` | Shared viem client for reading and writing to Mantle |
 
 ## API Endpoints
 
@@ -50,7 +50,7 @@ pnpm run start:prod
 |---|---|---|
 | `PORT` | No | HTTP port (default `3000`) |
 | `DATABASE_URL` | Yes | Postgres connection string |
-| `SOMNIA_RPC_URL` | Yes | Somnia RPC endpoint |
+| `MANTLE_RPC_URL` | Yes | Mantle RPC endpoint |
 | `CHAIN_ID` | Yes | `50312` |
 | `START_BLOCK` | No | Block to start indexing from (set to deploy block to skip history) |
 | `TASK_REGISTRY_ADDRESS` | Yes | Deployed TaskRegistry address |

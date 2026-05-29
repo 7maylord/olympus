@@ -27,21 +27,21 @@ export class ChainService {
     const rpcUrl  = config.get<string>('chain.rpcUrl')!;
     const chainId = config.get<number>('chain.chainId')!;
 
-    const somniaTestnet = defineChain({
+    const mantleTestnet = defineChain({
       id:   chainId,
-      name: 'Somnia Testnet',
+      name: 'Mantle Testnet',
       nativeCurrency: { name: 'STT', symbol: 'STT', decimals: 18 },
       rpcUrls: { default: { http: [rpcUrl] } },
     });
 
-    this.publicClient = createPublicClient({ chain: somniaTestnet, transport: http(rpcUrl) });
+    this.publicClient = createPublicClient({ chain: mantleTestnet, transport: http(rpcUrl) });
 
     const rawKey = config.get<string>('chain.keeperPrivateKey');
     const account = rawKey
       ? privateKeyToAccount(rawKey as `0x${string}`)
       : undefined;
 
-    this.walletClient = createWalletClient({ chain: somniaTestnet, transport: http(rpcUrl), account });
+    this.walletClient = createWalletClient({ chain: mantleTestnet, transport: http(rpcUrl), account });
 
     const taskRegistryAddress   = config.get<`0x${string}`>('chain.taskRegistryAddress')!;
     const agentRegistryAddress  = config.get<`0x${string}`>('chain.agentRegistryAddress')!;
