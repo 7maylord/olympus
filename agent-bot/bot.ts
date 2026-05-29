@@ -7,7 +7,7 @@ import { dirname, join } from 'path';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const RPC_URL              = process.env.RPC_URL              ?? 'https://dream-rpc.mantle.network';
+const RPC_URL              = process.env.RPC_URL              ?? 'https://dream-rpc.somnia.network';
 const API_URL              = process.env.API_URL              ?? 'http://localhost:3000';
 const TASK_REGISTRY        = (process.env.TASK_REGISTRY_ADDRESS  ?? '0xce0E28dE3216fa08D332439B3F4ECaeeE783d0eb') as `0x${string}`;
 const AGENT_REGISTRY       = (process.env.AGENT_REGISTRY_ADDRESS ?? '0xFA88cd15765bD93703D8CC7a42d83fFC6FAb01d3') as `0x${string}`;
@@ -18,9 +18,9 @@ const POLL_INTERVAL_MS     = Number(process.env.POLL_INTERVAL_MS ?? 6000);
 const CLAIM_BOND  = BigInt('100000000000000');  // 0.0001 STT
 const MIN_STAKE   = BigInt('10000000000000000'); // 0.01 STT
 
-const MANTLE_CHAIN = {
+const SOMNIA_CHAIN = {
   id: 50312,
-  name: 'Mantle Testnet',
+  name: 'Somnia Testnet',
   nativeCurrency: { name: 'STT', symbol: 'STT', decimals: 18 },
   rpcUrls: { default: { http: [RPC_URL] } },
 } as const;
@@ -57,8 +57,8 @@ if (!process.env.PRIVATE_KEY) {
 
 const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
 
-const publicClient = createPublicClient({ chain: MANTLE_CHAIN, transport: http(RPC_URL) });
-const walletClient = createWalletClient({ account, chain: MANTLE_CHAIN, transport: http(RPC_URL) });
+const publicClient = createPublicClient({ chain: SOMNIA_CHAIN, transport: http(RPC_URL) });
+const walletClient = createWalletClient({ account, chain: SOMNIA_CHAIN, transport: http(RPC_URL) });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

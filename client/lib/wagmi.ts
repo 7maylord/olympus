@@ -1,11 +1,11 @@
 import { http, createConfig } from 'wagmi';
-import { mantleTestnet } from './chain';
+import { somniaTestnet } from './chain';
 
 export const wagmiConfig = createConfig({
-  chains: [mantleTestnet],
+  chains: [somniaTestnet],
   transports: {
-    [mantleTestnet.id]: http(
-      process.env.NEXT_PUBLIC_MANTLE_RPC ?? 'https://dream-rpc.mantle.network',
+    [somniaTestnet.id]: http(
+      process.env.NEXT_PUBLIC_SOMNIA_RPC ?? 'https://dream-rpc.somnia.network',
     ),
   },
   ssr: true,
