@@ -348,8 +348,9 @@ export default function TaskDetailPage() {
             task.proofHash
               ? {
                   label: "Proof Hash",
-                  value: `${task.proofHash.slice(0, 16)}…`,
+                  value: `${task.proofHash.slice(0, 10)}…${task.proofHash.slice(-8)}`,
                   mono: true,
+                  href: `https://shannon-explorer.somnia.network/tx/${task.proofHash}`,
                 }
               : null,
             task.latencyMs
@@ -382,26 +383,46 @@ export default function TaskDetailPage() {
                     >
                       {item.label}
                     </div>
-                    <div
-                      style={{
-                        fontSize: "0.8rem",
-                        fontFamily: item.mono ? "monospace" : undefined,
-                        wordBreak: "break-all",
-                        cursor: item.mono ? "pointer" : undefined,
-                      }}
-                      onClick={
-                        item.mono ? () => handleCopy(item.value) : undefined
-                      }
-                      title={item.mono ? "Click to copy" : undefined}
-                    >
-                      {item.value}
-                      {item.mono && (
-                        <Copy
-                          size={11}
-                          style={{ marginLeft: 4, opacity: 0.5 }}
-                        />
-                      )}
-                    </div>
+                    {item.href ? (
+                      <a
+                        href={item.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: "0.8rem",
+                          fontFamily: "monospace",
+                          color: "var(--green)",
+                          textDecoration: "none",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        {item.value}
+                        <ExternalLink size={11} style={{ opacity: 0.7 }} />
+                      </a>
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: "0.8rem",
+                          fontFamily: item.mono ? "monospace" : undefined,
+                          wordBreak: "break-all",
+                          cursor: item.mono ? "pointer" : undefined,
+                        }}
+                        onClick={
+                          item.mono ? () => handleCopy(item.value) : undefined
+                        }
+                        title={item.mono ? "Click to copy" : undefined}
+                      >
+                        {item.value}
+                        {item.mono && (
+                          <Copy
+                            size={11}
+                            style={{ marginLeft: 4, opacity: 0.5 }}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                 ),
             )}

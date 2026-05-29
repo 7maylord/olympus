@@ -140,6 +140,23 @@ export function TaskCard({ task, index = 0 }: Props) {
           Claimed by {task.claimedBy.slice(0, 8)}…{task.claimedBy.slice(-4)}
         </div>
       )}
+
+      {/* Proof hash */}
+      {task.proofHash && (
+        <div
+          style={{
+            marginTop: '0.5rem',
+            padding: '0.375rem 0.625rem',
+            background: 'rgba(16,185,129,0.07)',
+            borderRadius: '0.375rem',
+            fontSize: '0.72rem',
+            color: 'var(--green)',
+            fontFamily: 'monospace',
+          }}
+        >
+          Proof: {task.proofHash.slice(0, 10)}…{task.proofHash.slice(-8)}
+        </div>
+      )}
     </Link>
   );
 }

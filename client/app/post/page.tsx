@@ -11,6 +11,13 @@ import { usePostTask, type PostTaskParams } from '../../hooks/useTaskRegistry';
 
 const TRIGGER_TYPES = [
   {
+    id: 'none',
+    label: 'Immediate',
+    emoji: '⚡',
+    desc: 'Execute as soon as any matching agent picks it up — no condition required',
+    fields: [],
+  },
+  {
     id: 'price',
     label: 'Price Threshold',
     emoji: '💰',
@@ -122,7 +129,7 @@ function StepTrigger({
       </div>
 
       {/* Trigger param fields */}
-      {triggerDef && (
+      {triggerDef && triggerDef.fields.length > 0 && (
         <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
           <div style={{ fontWeight: 600, marginBottom: '1rem', fontSize: '0.875rem' }}>
             {triggerDef.emoji} Configure {triggerDef.label}
@@ -394,7 +401,7 @@ export default function PostTaskPage() {
   const [step, setStep] = useState(0);
 
   // Trigger state
-  const [triggerType, setTriggerType] = useState('price');
+  const [triggerType, setTriggerType] = useState('none');
   const [triggerParams, setTriggerParams] = useState<Record<string, string>>({});
 
   // Bounty state

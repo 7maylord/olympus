@@ -145,7 +145,10 @@ async function executeTask(taskId: string, capabilityTag: string): Promise<`0x${
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
-const activeClaims = new Set<string>(); // taskIds currently being worked on
+const MAX_CONCURRENT_CLAIMS = 2;
+
+const activeClaims = new Set<string>(); // taskIds currently in-flight
+const failedTasks  = new Set<string>(); // taskIds where submitProof failed — skip for session
 
 async function tick(agentId: bigint) {
   interface ApiTask {
@@ -155,6 +158,12 @@ async function tick(agentId: bigint) {
     bounty: string;
     poster: string;
     expiry: string;
+  }
+
+  // Don't pick up new work if we're already at the claim limit
+  if (activeClaims.size >= MAX_CONCURRENT_CLAIMS) {
+    log(`⏳  At claim limit (${activeClaims.size}/${MAX_CONCURRENT_CLAIMS}) — waiting`);
+    return;
   }
 
   let tasks: ApiTask[];
@@ -168,16 +177,16 @@ async function tick(agentId: bigint) {
 
   const now = Math.floor(Date.now() / 1000);
 
-  // Filter: open, not expired, matches our capabilities, not already claimed by us
   const candidates = tasks.filter(t =>
     t.status === 'Open' &&
-    Number(t.expiry) > now + 60 && // at least 60s left
+    Number(t.expiry) > now + 60 &&
     capabilityTags.includes(t.capabilityTag as `0x${string}`) &&
-    !activeClaims.has(t.id)
+    !activeClaims.has(t.id) &&
+    !failedTasks.has(t.id),
   );
 
   if (candidates.length === 0) {
-    log(`😴  No matching open tasks (checked ${tasks.length} total)`);
+    log(`😴  No matching open tasks (checked ${tasks.length} total, ${failedTasks.size} skipped as failed)`);
     return;
   }
 
@@ -187,6 +196,11 @@ async function tick(agentId: bigint) {
 
   activeClaims.add(task.id);
 
+  // Fire-and-forget so the poll loop isn't blocked by a single slow task
+  handleTask(task).finally(() => activeClaims.delete(task.id));
+}
+
+async function handleTask(task: { id: string; capabilityTag: string }) {
   try {
     // 1. Claim
     log(`   📌  Claiming task #${task.id}…`);
@@ -196,6 +210,7 @@ async function tick(agentId: bigint) {
       functionName: 'claimTask',
       args: [BigInt(task.id)],
       value: CLAIM_BOND,
+      gas: 300000n,
     });
     log(`   claimTask tx: ${claimHash}`);
     await publicClient.waitForTransactionReceipt({ hash: claimHash });
@@ -211,15 +226,24 @@ async function tick(agentId: bigint) {
       abi: TaskRegistryABI,
       functionName: 'submitProof',
       args: [BigInt(task.id), proofTxHash],
+      gas: 200000n,
     });
     log(`   submitProof tx: ${submitHash}`);
     await publicClient.waitForTransactionReceipt({ hash: submitHash });
     log(`🏆  Task #${task.id} proof submitted! Waiting for dispute window…`);
 
   } catch (err: any) {
-    log(`❌  Task #${task.id} failed: ${err.message}`);
-  } finally {
-    activeClaims.delete(task.id);
+    const msg: string = err.message ?? String(err);
+    if (msg.includes('ClaimLimitReached')) {
+      log(`⚠️   Task #${task.id}: claim limit reached on-chain — will retry next poll`);
+      // Don't mark as failed — let it retry when a slot frees up
+    } else if (msg.includes('TriggerConditionNotMet')) {
+      log(`⛔  Task #${task.id}: trigger condition not met (task was posted with a price/health/block condition that isn't satisfied on-chain). Skipping for this session.`);
+      failedTasks.add(task.id);
+    } else {
+      log(`❌  Task #${task.id} failed: ${msg}`);
+      failedTasks.add(task.id);
+    }
   }
 }
 

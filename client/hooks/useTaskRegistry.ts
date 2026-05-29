@@ -41,7 +41,7 @@ export function useTaskCount() {
 
 export interface PostTaskParams {
   capabilityTag: string;         // e.g. 'SWAP'
-  triggerType: 'price' | 'health' | 'apy' | 'block';
+  triggerType: 'none' | 'price' | 'health' | 'apy' | 'block';
   triggerParams: Record<string, string | number>;
   targetAction: Record<string, string | number>;
   bountyEth: string;             // e.g. '0.05'
@@ -55,7 +55,7 @@ function encodeCapabilityTag(tag: string): `0x${string}` {
 }
 
 function encodeTrigger(type: string, params: Record<string, string | number>): `0x${string}` {
-  // Encode as (uint8 triggerType, bytes params)
+  if (type === 'none') return '0x';
   const typeMap: Record<string, number> = { price: 0, health: 1, apy: 2, block: 3 };
   const typeNum = typeMap[type] ?? 0;
   return encodeAbiParameters(
