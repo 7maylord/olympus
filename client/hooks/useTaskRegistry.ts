@@ -1,8 +1,8 @@
 'use client';
 
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi';
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, encodeAbiParameters, keccak256, toBytes } from 'viem';
-import { TASK_REGISTRY_ADDRESS, TaskRegistryABI, CLAIM_BOND, MIN_BOUNTY, LISTING_FEE } from '../lib/contracts';
+import { TASK_REGISTRY_ADDRESS, TaskRegistryABI, CLAIM_BOND, LISTING_FEE } from '../lib/contracts';
 
 export type TaskStatus = 0 | 1 | 2 | 3 | 4; // Open, Claimed, Executed, Expired, Disputed
 
@@ -54,16 +54,60 @@ function encodeCapabilityTag(tag: string): `0x${string}` {
   return keccak256(toBytes(tag));
 }
 
+// Map common token symbols to CoinGecko asset IDs (used by SomniaAgentsAdapter)
+const COINGECKO_IDS: Record<string, string> = {
+  ETH: 'ethereum', BTC: 'bitcoin', SOL: 'solana',
+  USDC: 'usd-coin', USDT: 'tether', MATIC: 'matic-network',
+};
+
 function encodeTrigger(type: string, params: Record<string, string | number>): `0x${string}` {
   if (type === 'none') return '0x';
-  const typeMap: Record<string, number> = { price: 0, health: 1, apy: 2, block: 3 };
-  const typeNum = typeMap[type] ?? 0;
+
+  // TriggerCondition enum: PriceBelow=0, PriceAbove=1, HealthFactor=2, APYSpread=3, BlockInterval=4
+  let typeNum: number;
+  let encodedParams: `0x${string}`;
+
+  if (type === 'price') {
+    // PriceBelow=0, PriceAbove=1
+    typeNum = String(params.direction).toLowerCase() === 'above' ? 1 : 0;
+    const symbol = String(params.tokenSymbol ?? '').toUpperCase();
+    const tokenId = COINGECKO_IDS[symbol] ?? symbol.toLowerCase();
+    const thresholdUSD18 = BigInt(Math.round(Number(params.threshold) * 1e18));
+    encodedParams = encodeAbiParameters(
+      [{ type: 'string' }, { type: 'uint256' }],
+      [tokenId, thresholdUSD18],
+    );
+  } else if (type === 'health') {
+    typeNum = 2;
+    const minHF18 = BigInt(Math.round(Number(params.threshold) * 1e18));
+    encodedParams = encodeAbiParameters(
+      [{ type: 'string' }, { type: 'address' }, { type: 'uint256' }],
+      [String(params.protocol), String(params.user) as `0x${string}`, minHF18],
+    );
+  } else if (type === 'apy') {
+    typeNum = 3;
+    // spreadPct → basis points (1% = 100 bps)
+    const spreadBPS = BigInt(Math.round(Number(params.spreadPct) * 100));
+    encodedParams = encodeAbiParameters(
+      [{ type: 'string' }, { type: 'string' }, { type: 'uint256' }],
+      [String(params.protocolA), String(params.protocolB), spreadBPS],
+    );
+  } else if (type === 'block') {
+    typeNum = 4;
+    // anchorBlock=0 placeholder; contract will interpret relative to current block
+    const intervalBlocks = BigInt(Number(params.intervalBlocks));
+    encodedParams = encodeAbiParameters(
+      [{ type: 'uint256' }, { type: 'uint256' }],
+      [0n, intervalBlocks],
+    );
+  } else {
+    return '0x';
+  }
+
+  // Outer encoding matches TriggerCondition struct: (uint8 triggerType, bytes params)
   return encodeAbiParameters(
     [{ type: 'uint8' }, { type: 'bytes' }],
-    [typeNum, encodeAbiParameters(
-      [{ type: 'string' }],
-      [JSON.stringify(params)],
-    )],
+    [typeNum, encodedParams],
   );
 }
 

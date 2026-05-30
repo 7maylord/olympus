@@ -9,8 +9,8 @@ import { dirname, join } from 'path';
 
 const RPC_URL              = process.env.RPC_URL              ?? 'https://dream-rpc.somnia.network';
 const API_URL              = process.env.API_URL              ?? 'http://localhost:3000';
-const TASK_REGISTRY        = (process.env.TASK_REGISTRY_ADDRESS  ?? '0xce0E28dE3216fa08D332439B3F4ECaeeE783d0eb') as `0x${string}`;
-const AGENT_REGISTRY       = (process.env.AGENT_REGISTRY_ADDRESS ?? '0xFA88cd15765bD93703D8CC7a42d83fFC6FAb01d3') as `0x${string}`;
+const TASK_REGISTRY        = (process.env.TASK_REGISTRY_ADDRESS  ?? '0x8450DA4dC6b25FF15EfC4F4B3Fc0E97Fa154DF16') as `0x${string}`;
+const AGENT_REGISTRY       = (process.env.AGENT_REGISTRY_ADDRESS ?? '0xC068715fB109ACecd159508A0B9079Def74202d0') as `0x${string}`;
 const CAPABILITIES         = (process.env.CAPABILITIES ?? 'SWAP,TRANSFER,COMPOUND,MONITOR').split(',').map(s => s.trim());
 const METADATA_URI         = process.env.METADATA_URI ?? 'https://olympus-agent.example/metadata.json';
 const POLL_INTERVAL_MS     = Number(process.env.POLL_INTERVAL_MS ?? 6000);

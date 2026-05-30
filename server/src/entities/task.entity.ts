@@ -49,7 +49,13 @@ export class Task {
   claimWindowSeconds: number;
 
   @Column({ name: 'proof_tx_hash', type: 'varchar', nullable: true })
-  proofTxHash: string | null;
+  proofHash: string | null;
+
+  @Column({ name: 'executed_at', type: 'bigint', nullable: true })
+  executedAt: string | null;
+
+  @Column({ name: 'latency_ms', type: 'int', nullable: true })
+  latencyMs: number | null;
 
   @Column({ name: 'block_number', type: 'bigint' })
   blockNumber: string;

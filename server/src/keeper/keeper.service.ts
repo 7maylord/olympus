@@ -56,7 +56,10 @@ export class KeeperService {
 
   private async sendExpire(taskId: string) {
     try {
-      const hash = await (this.chain.taskRegistry as any).write.expireTask([BigInt(taskId)]);
+      const hash = await (this.chain.taskRegistry as any).write.expireTask(
+        [BigInt(taskId)],
+        { gas: 200000n },
+      );
       this.logger.log(`expireTask(${taskId}) → ${hash}`);
     } catch (err: any) {
       this.logger.warn(`expireTask(${taskId}) failed: ${err.message}`);
@@ -65,7 +68,10 @@ export class KeeperService {
 
   private async sendFinalize(taskId: string) {
     try {
-      const hash = await (this.chain.executionVerifier as any).write.finalizeExecution([BigInt(taskId)]);
+      const hash = await (this.chain.executionVerifier as any).write.finalizeExecution(
+        [BigInt(taskId)],
+        { gas: 300000n },
+      );
       this.logger.log(`finalizeExecution(${taskId}) → ${hash}`);
     } catch (err: any) {
       this.logger.warn(`finalizeExecution(${taskId}) failed: ${err.message}`);

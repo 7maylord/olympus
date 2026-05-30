@@ -108,10 +108,13 @@ export class IndexerService implements OnApplicationBootstrap {
         });
 
       } else if (log.eventName === 'TaskExecuted') {
-        const { proofHash } = log.args as any;
+        const { proofHash, latencyMs } = log.args as any;
+        const block = await this.chain.publicClient.getBlock({ blockNumber: log.blockNumber! });
         await this.tasks.update(taskId, {
-          status:      TaskStatus.Executed,
-          proofTxHash: proofHash as string,
+          status:    TaskStatus.Executed,
+          proofHash: proofHash as string,
+          latencyMs: Number(latencyMs),
+          executedAt: block.timestamp.toString(),
         });
 
       } else if (log.eventName === 'TaskExpired') {
@@ -159,9 +162,9 @@ export class IndexerService implements OnApplicationBootstrap {
         }, ['id']);
 
       } else if (log.eventName === 'FeedbackPosted') {
-        const { success, reputationScore } = log.args as any;
+        const { success, score } = log.args as any;
         await this.agents.update(agentId, {
-          reputationScore: Number(reputationScore),
+          reputationScore: Number(score),
           ...(success ? { tasksCompleted: () => '"tasks_completed" + 1' }
                       : { tasksFailed:    () => '"tasks_failed" + 1' }),
         });

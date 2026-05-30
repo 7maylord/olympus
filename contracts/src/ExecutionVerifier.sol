@@ -41,7 +41,7 @@ contract ExecutionVerifier is IERC8004Validation {
     constructor(address _taskRegistry, address _agentRegistry, address _somniaAdapter) {
         taskRegistry  = TaskRegistry(_taskRegistry);
         agentRegistry = AgentRegistry(_agentRegistry);
-        somniaAdapter = SomniaAgentsAdapter(_somniaAdapter);
+        somniaAdapter = SomniaAgentsAdapter(payable(_somniaAdapter));
     }
 
     function verifyAndSettle(uint256 taskId, bytes32 proofTxHash, address agent) external {

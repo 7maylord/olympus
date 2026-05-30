@@ -15,17 +15,16 @@ contract Deploy is Script {
 
         address treasury = vm.envOr("TREASURY_ADDRESS", deployer);
 
+        // Official Somnia Agents Platform
+        // Testnet: 0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776
+        // Mainnet: 0x5E5205CF39E766118C01636bED000A54D93163E6
         address somniaAgents = vm.envOr("SOMNIA_AGENTS_ADDRESS", address(0));
 
-        string memory priceBase = vm.envOr(
-            "PRICE_FEED_BASE_URL",
-            string("https://api.price-feed.xyz/v1/")
-        );
-
         console2.log("=== Olympus Protocol Deployment ===");
-        console2.log("Deployer  :", deployer);
-        console2.log("Treasury  :", treasury);
-        console2.log("Chain ID  :", block.chainid);
+        console2.log("Deployer        :", deployer);
+        console2.log("Treasury        :", treasury);
+        console2.log("Somnia Platform :", somniaAgents);
+        console2.log("Chain ID        :", block.chainid);
         console2.log("");
 
         vm.startBroadcast(deployerKey);
@@ -36,7 +35,7 @@ contract Deploy is Script {
         BountyEscrow bountyEscrow = new BountyEscrow(treasury);
         console2.log("BountyEscrow         :", address(bountyEscrow));
 
-        SomniaAgentsAdapter somniaAdapter = new SomniaAgentsAdapter(somniaAgents, priceBase);
+        SomniaAgentsAdapter somniaAdapter = new SomniaAgentsAdapter(somniaAgents);
         console2.log("SomniaAgentsAdapter  :", address(somniaAdapter));
 
         TaskRegistry taskRegistry = new TaskRegistry(

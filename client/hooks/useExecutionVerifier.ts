@@ -53,6 +53,7 @@ export function useFinalizeExecution(taskId: bigint | undefined) {
       abi: ExecutionVerifierABI,
       functionName: 'finalizeExecution',
       args: [taskId],
+      gas: 300000n,
     });
   };
 
@@ -70,6 +71,7 @@ export function useDisputeExecution(taskId: bigint | undefined) {
       abi: ExecutionVerifierABI,
       functionName: 'disputeExecution',
       args: [taskId],
+      gas: 300000n,
     });
   };
 
